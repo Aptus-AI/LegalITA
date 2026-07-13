@@ -1,0 +1,30 @@
+# Dati — input privati e output generati, mai su GitHub
+data/
+results/
+tasks/
+artifacts/
+_incoming/
+*.csv
+
+# Credenziali
+.env
+.env.*
+
+# Package / build
+*.egg-info/
+build/
+dist/
+
+# Python
+__pycache__/
+*.pyc
+*.py[cod]
+.venv/
+venv/
+tests/
+.tmp/
+
+# OS / editor
+.DS_Store
+.idea/
+.vscode/

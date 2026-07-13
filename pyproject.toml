@@ -1,0 +1,29 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "legal-ITA-benchmark"
+version = "0.1.0"
+description = "Benchmark open source per la valutazione di LLM su task di ragionamento giurisprudenziale italiano"
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "MIT" }
+dependencies = [
+    "anthropic>=0.40,<1.0",
+    "openai>=1.40,<2.0",
+    "pydantic>=2.6,<3.0",
+    "pandas>=2.2,<3.0",
+    "matplotlib>=3.8,<4.0",
+    "seaborn>=0.13,<0.14",
+    "tqdm>=4.66,<5.0",
+    "python-dotenv>=1.0,<2.0",
+]
+
+[tool.setuptools]
+# Moduli flat nella root del progetto
+py-modules = ["config", "schemas", "taxonomy", "build_corpus", "run_benchmark", "charts", "usage_tracking", "model_query", "model_request_config", "model_runtime"]
+
+[tool.setuptools.packages.find]
+# Package veri e propri
+include = ["benchmark*", "evaluation*"]

@@ -1,0 +1,8 @@
+anthropic>=0.40,<1.0
+openai>=1.40,<2.0
+pydantic>=2.6,<3.0
+pandas>=2.2,<3.0
+matplotlib>=3.8,<4.0
+seaborn>=0.13,<0.14
+tqdm>=4.66,<5.0
+python-dotenv>=1.0,<2.0
