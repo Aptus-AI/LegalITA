@@ -20,6 +20,9 @@ dependencies = [
     "python-dotenv>=1.0,<2.0",
 ]
 
+[project.scripts]
+legalita-grounding = "evaluation.citation_grounding:main"
+
 [tool.setuptools]
 # Moduli flat nella root del progetto
 py-modules = ["config", "schemas", "taxonomy", "build_corpus", "run_benchmark", "charts", "usage_tracking", "model_query", "model_request_config", "model_runtime"]

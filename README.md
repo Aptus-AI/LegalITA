@@ -1,16 +1,13 @@
 # LegalITA
 
 LegalITA is a benchmark for evaluating language models on Italian case-law
-reasoning tasks. It includes criterion-based legal evaluation and adversarial
-false-premise evaluation. The project also defines a citation-grounding
-pipeline and the official Structural Gold v3 gold-builder pipeline for
-issue-state classification; their implementation depends on a private
-knowledge base and is **not included** in this repository — it is documented
-in [docs/CITATION_GROUNDING.md](docs/CITATION_GROUNDING.md).
+reasoning tasks. It includes criterion-based legal evaluation, adversarial
+false-premise evaluation and a reproducible local citation-grounding pipeline.
 
-**This public repository runs only with citation grounding disabled**
-(`--skip-citation-grounding`). Deployment-specific endpoint names, bucket
-names, index names, and secrets are intentionally not committed.
+The official internal grounding pipeline runs on private AWS infrastructure
+and is not distributed. The public implementation instead uses a versioned
+SQLite registry and per-question profiles supplied as a separate data bundle;
+it requires no access to Aptus systems.
 
 ## Getting oriented: what you can reproduce today
 
@@ -86,13 +83,8 @@ the model notices that documents invoked by the question were not supplied,
 instead of inventing their contents or giving document-specific advice.
 
 These runs still require API keys for the evaluated model and the configured
-judge or judges. Citation grounding and Structural Gold v3 are not
-reproducible from this repository: their implementation depends on private
-Pinecone indexes, structured S3 documents, and deployment credentials, and is
-not distributed here. Always run the benchmark with
-`--skip-citation-grounding`; see
-[docs/CITATION_GROUNDING.md](docs/CITATION_GROUNDING.md) for how those
-pipelines work and why they are not replicable.
+judge or judges. Citation grounding can be run separately with the public
+local bundle; see [docs/CITATION_GROUNDING.md](docs/CITATION_GROUNDING.md).
 
 ## Guida introduttiva: cosa puoi riprodurre oggi
 
@@ -167,13 +159,9 @@ che i documenti richiamati dalla domanda non sono stati forniti, invece di
 inventarne il contenuto o proporre una strategia fondata su atti che non ha
 potuto leggere.
 
-Le due esecuzioni richiedono comunque le chiavi API del modello valutato e del
-judge, o dei judge, configurati. Il citation grounding e Structural Gold v3
-non sono riproducibili da questo repository: la loro implementazione dipende
-da indici Pinecone privati, documenti strutturati in S3 e credenziali di
-deployment, e non è distribuita qui. Il benchmark va sempre eseguito con
-`--skip-citation-grounding`; il funzionamento di quelle pipeline e i motivi
-della loro non replicabilità sono documentati in
+Le due esecuzioni richiedono comunque le chiavi API del modello valutato e dei
+judge configurati. Il citation grounding può essere eseguito separatamente con
+il bundle locale pubblico; vedere
 [docs/CITATION_GROUNDING.md](docs/CITATION_GROUNDING.md).
 
 ## Setup
@@ -190,9 +178,8 @@ ANTHROPIC_API_KEY=...
 OPENAI_API_KEY=...
 ```
 
-Pinecone index names, S3 bucket names, S3 prefixes, AWS profiles, and Aptus
-hosts are local deployment configuration. Provide them through environment
-variables or explicit CLI flags.
+Il grounding pubblico usa soltanto `OPENAI_API_KEY` per l'estrazione delle
+citazioni; registry e profili sono file locali.
 
 ## Adaptive 2-of-3 Judge
 
@@ -272,31 +259,20 @@ python run_bullshit_v2.py --models gpt-4o --limit 1 \
   --judge-c-provider anthropic --judge-c-model claude-opus-4-8
 ```
 
-## Citation Grounding and Structural Gold v3 (not distributed)
+## Citation Grounding
 
-Citation grounding is separate from legal reasoning: it extracts the rulings
-cited in a model answer, normalizes them, and verifies whether they exist and
-whether they are the rulings required by the task gold. Structural Gold v3 is
-the gold-builder pipeline that produced the reference annotations by
-reconstructing the jurisprudential state of each legal question from retrieved
-case-law evidence.
+Citation grounding is separate from legal-reasoning scoring. It extracts the
+rulings cited in an answer, checks their identity against the local registry,
+and compares them with the profile of the corresponding question. The command
+reports the GOG and Coverage metrics without contacting an Aptus service:
 
-The implementation of both pipelines is **not included in this repository**:
-it depends on private Pinecone indexes built over a proprietary corpus of
-Cassation rulings, on structured S3 court-ruling documents, and on
-deployment-specific credentials, none of which can be redistributed. As a
-consequence, this repository runs the benchmark only with citation grounding
-disabled (`--skip-citation-grounding`), and citation-related fields in the
-results are reported as not applicable.
+```bash
+legalita-grounding --results results/<provider>/<run> --backend local
+```
 
-How the pipelines work and why they are not replicable is documented in
-[docs/CITATION_GROUNDING.md](docs/CITATION_GROUNDING.md).
-
-L'implementazione del citation grounding e di Structural Gold v3 **non è
-inclusa in questo repository**: dipende da indici Pinecone privati, documenti
-strutturati S3 e credenziali di deployment non redistribuibili. Il benchmark
-va eseguito solo con `--skip-citation-grounding`. Funzionamento e motivi della
-non replicabilità sono documentati in
+The registry and question profiles are distributed separately because the
+registry is too large for the source repository. Setup, bundle layout and
+report semantics are documented in
 [docs/CITATION_GROUNDING.md](docs/CITATION_GROUNDING.md).
 
 ## Canonical Taxonomy
@@ -384,9 +360,8 @@ data/raw/sentenze.zip
 artifacts/
 results/
 .env
-deployment-specific Pinecone/S3 configuration
-citation grounding and Structural Gold v3 implementation
-  (evaluation/citations/, gold_builder/, structural_v3 scripts)
+local registry and question-profile data bundle
+internal workflow, application backend, and gold-building components
 ```
 
 Included in the repository:

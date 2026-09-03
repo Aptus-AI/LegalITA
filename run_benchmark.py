@@ -9,7 +9,6 @@ avere prefissi legacy mentre il campo macro_area viene canonizzato a runtime.
 import argparse
 import json
 import logging
-import os
 import time
 from datetime import datetime, timezone
 from pathlib import Path
@@ -28,15 +27,6 @@ from config import (
     build_judge_runtime_config,
     validate_judge_runtime_config,
 )
-try:
-    from evaluation.citations.pinecone_resolver import DEFAULT_INDEX_ENV, PineconeCitationResolver
-    from evaluation.citations.service import CitationExistenceService
-except ImportError:
-    # Distribuzione pubblica: il modulo di citation grounding non e' incluso.
-    # Il benchmark funziona solo con --skip-citation-grounding.
-    DEFAULT_INDEX_ENV = None
-    PineconeCitationResolver = None
-    CitationExistenceService = None
 from evaluation.judge import Judge, create_judge_from_config
 from evaluation.scoring import score_batch, summarize_batch_scores
 from model_query import (
@@ -223,27 +213,6 @@ def save_summary(summary: dict, run_id: str) -> Path:
     return out_path
 
 
-def validate_citation_runtime_config() -> str:
-    """Verifica le credenziali minime per citation grounding DeepSeek + Pinecone."""
-    if DEFAULT_INDEX_ENV is None:
-        raise RuntimeError(
-            "Citation grounding non disponibile in questa distribuzione: "
-            "eseguire con --skip-citation-grounding."
-        )
-    required_names = [
-        "NOVITA_API_KEY",
-        "PINECONE_API_KEY",
-        DEFAULT_INDEX_ENV,
-    ]
-    missing = [name for name in required_names if not os.environ.get(name)]
-    if missing:
-        raise RuntimeError(
-            "Citation grounding non configurato: variabili mancanti "
-            + ", ".join(missing)
-        )
-    return os.environ[DEFAULT_INDEX_ENV]
-
-
 def run(
     models: list[str],
     area: str | None = None,
@@ -257,14 +226,8 @@ def run(
     judge_c_provider: str | None = None,
     judge_c_model: str | None = None,
     delay_between: float = 0.3,
-    skip_citation_grounding: bool = False,
-    strict_citation_grounding: bool = False,
+    skip_citation_grounding: bool = True,
 ) -> None:
-    index_name = (
-        None
-        if skip_citation_grounding
-        else validate_citation_runtime_config()
-    )
     judge_config = build_judge_runtime_config(
         judge_strategy=judge_strategy,
         judge_a_provider=judge_a_provider,
@@ -282,7 +245,6 @@ def run(
         judge = Judge(model=judge_config.judge_a.model)
     else:
         judge = create_judge_from_config(judge_config)
-    citation_service: CitationExistenceService | None = None
     log.info(
         "Judge strategy: %s | A=%s/%s | B=%s/%s | C=%s/%s",
         judge_config.strategy,
@@ -294,19 +256,7 @@ def run(
         judge_config.judge_c.model or "-",
     )
 
-    if skip_citation_grounding:
-        log.info("Citation grounding disattivato.")
-    else:
-        resolver = PineconeCitationResolver(index_name=index_name)
-        citation_service = CitationExistenceService(
-            resolver=resolver,
-        )
-        registry_info = citation_service.get_registry_info()
-        log.info(
-            "Citation grounding attivo: backend=pinecone+deepseek (built_at=%s, index=%s)",
-            registry_info.get("built_at"),
-            registry_info.get("index_name"),
-        )
+    log.info("Il citation grounding viene eseguito separatamente con legalita-grounding.")
 
     for model in models:
         log.info("\n%s", "=" * 50)
@@ -334,9 +284,8 @@ def run(
             outputs,
             model,
             judge,
-            citation_service=citation_service,
-            citation_grounding_enabled=not skip_citation_grounding,
-            strict_citation_grounding=strict_citation_grounding,
+            citation_service=None,
+            citation_grounding_enabled=False,
         )
         scores = [
             with_model_call_metrics(score, model_call_metrics.get(score.task_id))
@@ -419,11 +368,6 @@ if __name__ == "__main__":
         action="store_true",
         help="Disattiva il citation existence check.",
     )
-    parser.add_argument(
-        "--strict-citation-grounding",
-        action="store_true",
-        help="Interrompe il run se il resolver citation grounding va in errore.",
-    )
     args = parser.parse_args()
 
     run(
@@ -439,5 +383,4 @@ if __name__ == "__main__":
         judge_c_provider=args.judge_c_provider,
         judge_c_model=args.judge_c_model,
         skip_citation_grounding=args.skip_citation_grounding,
-        strict_citation_grounding=args.strict_citation_grounding,
     )

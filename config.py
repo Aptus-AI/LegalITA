@@ -234,20 +234,6 @@ def _api_key_name(provider: str) -> str | None:
 BUILDER_TEMPERATURE: float = 0.0
 
 # ---------------------------------------------------------------------------
-# Structured court-rulings S3 resolver. Values are deployment-specific and must
-# be provided by environment/CLI in live Aptus runs.
-# ---------------------------------------------------------------------------
-
-COURT_RULINGS_S3_BUCKET: str = os.environ.get(
-    "COURT_RULINGS_S3_BUCKET",
-    "",
-).strip()
-COURT_RULINGS_S3_PREFIX: str = os.environ.get(
-    "COURT_RULINGS_S3_PREFIX",
-    "",
-).strip()
-
-# ---------------------------------------------------------------------------
 # Run - parametri dei modelli sotto esame
 # ---------------------------------------------------------------------------
 

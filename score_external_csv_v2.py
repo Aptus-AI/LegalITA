@@ -18,17 +18,9 @@ from pathlib import Path
 import pandas as pd
 
 from config import JUDGE_MODEL, build_judge_runtime_config
-try:
-    from evaluation.citations.pinecone_resolver import PineconeCitationResolver
-    from evaluation.citations.service import CitationExistenceService
-except ImportError:
-    # Distribuzione pubblica: il modulo di citation grounding non e' incluso.
-    # Lo scoring esterno viene eseguito senza citation grounding.
-    PineconeCitationResolver = None
-    CitationExistenceService = None
 from evaluation.judge import Judge, create_judge_from_config
 from evaluation.scoring import score_batch, summarize_batch_scores
-from run_benchmark import load_tasks, save_scores, save_summary, validate_citation_runtime_config
+from run_benchmark import load_tasks, save_scores, save_summary
 
 logging.basicConfig(
     level=logging.INFO,
@@ -129,15 +121,7 @@ def run_external_scoring(
     judge_c_model: str | None = None,
 ) -> Path:
     log.info("VERSIONE V2 ATTIVA — normalizzazione tipografica CSV/task abilitata")
-    citation_grounding_available = PineconeCitationResolver is not None
-    if citation_grounding_available:
-        index_name = validate_citation_runtime_config()
-    else:
-        index_name = None
-        log.warning(
-            "Citation grounding non disponibile in questa distribuzione: "
-            "scoring eseguito senza verifica delle citazioni."
-        )
+    log.info("Il citation grounding viene eseguito separatamente con legalita-grounding.")
     rows = load_external_outputs(csv_path)
     all_tasks = load_tasks(area=area)
 
@@ -202,20 +186,13 @@ def run_external_scoring(
         judge = Judge(model=judge_config.judge_a.model)
     else:
         judge = create_judge_from_config(judge_config)
-    citation_service = (
-        CitationExistenceService(
-            resolver=PineconeCitationResolver(index_name=index_name),
-        )
-        if citation_grounding_available
-        else None
-    )
     scores = score_batch(
         matched_tasks,
         outputs,
         model_name,
         judge,
-        citation_service=citation_service,
-        citation_grounding_enabled=citation_grounding_available,
+        citation_service=None,
+        citation_grounding_enabled=False,
     )
 
     timestamp = datetime.now(timezone.utc).strftime("%Y%m%d-%H%M%S")
