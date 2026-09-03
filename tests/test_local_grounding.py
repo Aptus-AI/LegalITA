@@ -175,6 +175,39 @@ class GroundingCliTest(unittest.TestCase):
         self.assertNotIn("citations_total", printed)
         self.assertEqual(report["summary"]["gog"], 1.0)
         self.assertEqual(report["tasks"][0]["citations"][0]["gold_v3_relation"], "issue_aligned")
+    def test_default_denominator_is_the_number_of_tasks_in_the_input(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            registry = root / "registry.sqlite"
+            profiles = root / "profiles"
+            results = root / "outputs.json"
+            build_registry(registry)
+            build_profiles(profiles)
+            results.write_text(
+                json.dumps(
+                    [
+                        {"task_id": "diritto_civile/0001", "model": "m", "model_output": f"Si veda {ECLI}."},
+                    ]
+                ),
+                encoding="utf-8",
+            )
+            common = [
+                "--results", str(results),
+                "--citation-registry", str(registry),
+                "--question-profiles", str(profiles),
+                "--fast-path",
+            ]
+            with redirect_stdout(io.StringIO()) as by_input:
+                main([*common, "--out-dir", str(root / "by_input")])
+            with redirect_stdout(io.StringIO()) as forced:
+                main([*common, "--out-dir", str(root / "forced"), "--n-tasks", "67"])
+            report_input = json.loads((root / "by_input/citation_grounding_v3.json").read_text(encoding="utf-8"))
+            report_forced = json.loads((root / "forced/citation_grounding_v3.json").read_text(encoding="utf-8"))
+
+        self.assertIn("Tasks=1", by_input.getvalue())
+        self.assertEqual(report_input["summary"]["gog"], 1.0)
+        self.assertIn("Tasks=67", forced.getvalue())
+        self.assertAlmostEqual(report_forced["summary"]["gog"], 1 / 67)
 
 
 class BenchmarkGroundingIntegrationTest(unittest.TestCase):
@@ -277,6 +310,39 @@ class PublicBundleTest(unittest.TestCase):
 
         self.assertNotIn("internal_notes", public_profile)
         self.assertEqual(source, "LegalITA public ECLI registry snapshot")
+
+    def test_builder_can_restrict_profiles_to_a_task_subset(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            registry = root / "registry.sqlite"
+            profiles = root / "profiles"
+            build_registry(registry)
+            build_profiles(profiles)
+            other = json.loads((profiles / "diritto_civile_0001.json").read_text(encoding="utf-8"))
+            other["task_id"] = "lavoro/0002"
+            (profiles / "lavoro_0002.json").write_text(json.dumps(other), encoding="utf-8")
+
+            build_bundle(
+                registry=registry,
+                profiles=profiles,
+                out_dir=root / "subset",
+                task_ids={"lavoro/0002"},
+            )
+            index = json.loads((root / "subset/question_profiles/index.json").read_text(encoding="utf-8"))
+            manifest = json.loads((root / "subset/manifest.json").read_text(encoding="utf-8"))
+            files = sorted(path.name for path in (root / "subset/question_profiles").glob("*.json"))
+
+            with self.assertRaises(FileNotFoundError):
+                build_bundle(
+                    registry=registry,
+                    profiles=profiles,
+                    out_dir=root / "broken",
+                    task_ids={"lavoro/0002", "tributario/0099"},
+                )
+
+        self.assertEqual(files, ["index.json", "lavoro_0002.json"])
+        self.assertEqual(index["task_count"], 1)
+        self.assertEqual(manifest["question_profiles"], 1)
 
 
 if __name__ == "__main__":

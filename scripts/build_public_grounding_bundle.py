@@ -18,7 +18,14 @@ PROFILE_LISTS = (
 )
 
 
-def build_bundle(*, registry: Path, profiles: Path, out_dir: Path) -> Path:
+def build_bundle(
+    *,
+    registry: Path,
+    profiles: Path,
+    out_dir: Path,
+    task_ids: set[str] | None = None,
+) -> Path:
+    """``task_ids`` limita i profili copiati a quei task (bundle per un sottoinsieme)."""
     if out_dir.exists():
         raise FileExistsError(f"La destinazione esiste già: {out_dir}")
     if not registry.is_file():
@@ -33,7 +40,7 @@ def build_bundle(*, registry: Path, profiles: Path, out_dir: Path) -> Path:
 
     public_registry = registry_dir / "ecli_registry_v1.sqlite"
     _copy_registry(registry, public_registry)
-    profile_index = _copy_profiles(profiles, profiles_dir)
+    profile_index = _copy_profiles(profiles, profiles_dir, task_ids=task_ids)
     registry_info = _registry_info(public_registry)
 
     manifest = {
@@ -70,7 +77,11 @@ def _copy_registry(source: Path, destination: Path) -> None:
         source_connection.close()
 
 
-def _copy_profiles(source: Path, destination: Path) -> dict[str, Any]:
+def _copy_profiles(
+    source: Path,
+    destination: Path,
+    task_ids: set[str] | None = None,
+) -> dict[str, Any]:
     source_index_path = source / "index.json"
     source_index = (
         json.loads(source_index_path.read_text(encoding="utf-8"))
@@ -83,7 +94,7 @@ def _copy_profiles(source: Path, destination: Path) -> dict[str, Any]:
             continue
         payload = json.loads(path.read_text(encoding="utf-8"))
         task_id = str(payload.get("task_id") or "").strip()
-        if not task_id:
+        if not task_id or (task_ids is not None and task_id not in task_ids):
             continue
         resolving = [
             {
@@ -115,6 +126,11 @@ def _copy_profiles(source: Path, destination: Path) -> dict[str, Any]:
             "resolving": len(resolving),
             **{key: len(public_profile[key]) for key in PROFILE_LISTS},
         }
+
+    if task_ids is not None:
+        missing = sorted(task_ids - set(task_entries))
+        if missing:
+            raise FileNotFoundError(f"Profili mancanti per i task richiesti: {missing}")
 
     index = {
         "schema_version": "legalita-question-profiles-public-index-1",
@@ -162,12 +178,39 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--profiles", type=Path, required=True)
     parser.add_argument("--out-dir", type=Path, required=True)
     parser.add_argument("--zip", action="store_true", dest="make_zip")
+    parser.add_argument(
+        "--task-ids",
+        nargs="*",
+        default=None,
+        help="Includi solo i profili di questi task (es. diritto_civile/0001).",
+    )
+    parser.add_argument(
+        "--task-ids-file",
+        type=Path,
+        default=None,
+        help="File di testo con un task_id per riga; righe vuote e commenti (#) ignorati.",
+    )
     return parser
+
+
+def _requested_task_ids(args: argparse.Namespace) -> set[str] | None:
+    ids: set[str] = set(args.task_ids or [])
+    if args.task_ids_file:
+        for line in args.task_ids_file.read_text(encoding="utf-8").splitlines():
+            line = line.split("#", 1)[0].strip()
+            if line:
+                ids.add(line)
+    return ids or None
 
 
 def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
-    out_dir = build_bundle(registry=args.registry, profiles=args.profiles, out_dir=args.out_dir)
+    out_dir = build_bundle(
+        registry=args.registry,
+        profiles=args.profiles,
+        out_dir=args.out_dir,
+        task_ids=_requested_task_ids(args),
+    )
     print(f"bundle={out_dir.resolve()}")
     if args.make_zip:
         archive = Path(shutil.make_archive(str(out_dir), "zip", root_dir=out_dir.parent, base_dir=out_dir.name))

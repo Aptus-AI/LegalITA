@@ -367,8 +367,10 @@ The standalone report is written to
 `results/grounding-offline/<run>/citation_grounding_v3.{json,md}`. The only
 network call is the citation extractor (`OPENAI_API_KEY`); `--fast-path` skips
 it and evaluates explicit ECLI identifiers only. Use `--task-ids` for a quick
-trial on a few tasks. Reports are comparable only when produced with the same
-bundle: the snapshot date is recorded in every report. Statuses, snapshot
+trial on a few tasks. GOG and Coverage are averaged over the tasks present in
+the input (or in the run, inside `legalita-benchmark`); pass `--n-tasks 67` to
+compare with the full benchmark, counting missing tasks as zero. Reports are
+comparable only when produced with the same bundle: the snapshot date is recorded in every report. Statuses, snapshot
 limits and troubleshooting are documented in
 [docs/CITATION_GROUNDING.md](docs/CITATION_GROUNDING.md).
 
@@ -468,8 +470,10 @@ Il report dell'esecuzione autonoma viene scritto in
 `results/grounding-offline/<run>/citation_grounding_v3.{json,md}`. L'unica
 chiamata di rete è l'estrattore di citazioni (`OPENAI_API_KEY`); `--fast-path`
 la evita e valuta solo gli ECLI espliciti. `--task-ids` permette una prova
-rapida su pochi task. I report sono confrontabili solo se prodotti con lo
-stesso pacchetto: la data dello snapshot è registrata in ogni report. Stati,
+rapida su pochi task. GOG e Coverage sono medie sui task presenti nell'input
+(o nella run, dentro `legalita-benchmark`); con `--n-tasks 67` si confronta
+con il benchmark completo, contando zero i task assenti. I report sono
+confrontabili solo se prodotti con lo stesso pacchetto: la data dello snapshot è registrata in ogni report. Stati,
 limiti dello snapshot e problemi comuni sono documentati in
 [docs/CITATION_GROUNDING.md](docs/CITATION_GROUNDING.md).
 

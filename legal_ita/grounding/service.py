@@ -404,7 +404,16 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--answer-column", default=None)
     parser.add_argument("--model", default=None)
     parser.add_argument("--task-ids", nargs="*", default=None)
-    parser.add_argument("--n-tasks", type=int, default=BENCHMARK_TASK_COUNT)
+    parser.add_argument(
+        "--n-tasks",
+        type=int,
+        default=None,
+        help=(
+            "Denominatore di GOG e Coverage. Default: numero di task distinti presenti "
+            "nell'input (dopo --task-ids). Usare 67 per confrontare con il benchmark "
+            "completo: i task assenti contano zero."
+        ),
+    )
     parser.add_argument("--extractor-model", default=CITATION_EXTRACTOR_MODEL)
     parser.add_argument("--extractor-timeout-seconds", type=float, default=120.0)
     parser.add_argument("--extractor-max-retries", type=int, default=2)
@@ -437,6 +446,7 @@ def main(argv: list[str] | None = None) -> int:
         records = [record for record in records if record.task_id in wanted]
     if not records:
         raise SystemExit("Nessuna risposta da valutare")
+    n_tasks = args.n_tasks if args.n_tasks is not None else len({record.task_id for record in records})
     label_source = args.results or args.csv
     label = (args.model or (label_source.stem if label_source else "run")).replace(" ", "_")
     out_dir = args.out_dir or _available_out_dir(DEFAULT_RESULTS_ROOT / label)
@@ -445,7 +455,7 @@ def main(argv: list[str] | None = None) -> int:
         registry_path=registry,
         profiles_dir=profiles_dir,
         out_dir=out_dir,
-        n_tasks=args.n_tasks,
+        n_tasks=n_tasks,
         extractor_model=args.extractor_model,
         extractor_timeout_seconds=args.extractor_timeout_seconds,
         extractor_max_retries=args.extractor_max_retries,

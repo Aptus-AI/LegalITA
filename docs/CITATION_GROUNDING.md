@@ -125,7 +125,9 @@ Opzioni utili:
 
 ```text
 --task-ids diritto_civile/0001 lavoro/0003   prova su pochi task
---n-tasks N                                  denominatore delle medie (default 67)
+--n-tasks N                                  denominatore delle medie; default: numero di
+                                             task distinti nell'input. 67 per confrontare
+                                             con il benchmark completo
 --fast-path                                  salta l'estrattore LLM: valuta solo
                                              ECLI espliciti e URL riconoscibili
 --extractor-model / --extractor-timeout-seconds / --extractor-max-retries
@@ -173,9 +175,13 @@ quelli prodotti dalla pipeline interna, che non è distribuita.
    Coverage_i = 1 se almeno una citazione è issue_aligned, altrimenti 0
    ```
 
-   GOG e Coverage sono le medie sui 67 task. Un task assente dalla run
-   contribuisce con zero, salvo che si imposti `--n-tasks` per una prova
-   parziale.
+   GOG e Coverage sono le medie per task. Il denominatore è, di default, il
+   numero di task distinti presenti nell'input (dopo `--task-ids`): chi valuta
+   un sottoinsieme di 40 task ottiene medie su 40. Dentro `legalita-benchmark`
+   è il numero di task della run. Per confrontare un sistema con il benchmark
+   completo si forza `--n-tasks 67`: i task assenti dall'input contano allora
+   zero. Il denominatore usato è riportato a schermo (`Tasks=N`) e nel summary
+   (`gog_tasks_total`).
 
 ## Output
 
@@ -190,7 +196,7 @@ results/grounding-offline/<run>/citation_grounding_v3.md     tabella per task
 A schermo:
 
 ```text
-GOG=xx.x%  Coverage=xx.x%  Tasks=67  backend=local  registry=<data snapshot>
+GOG=xx.x%  Coverage=xx.x%  Tasks=<N>  backend=local  registry=<data snapshot>
 results=<directory del report>
 ```
 
@@ -249,6 +255,25 @@ Il builder usa solo la libreria standard, conserva i soli campi necessari al
 runtime, scrive `manifest.json` nella root del bundle con conteggi e checksum, e
 rifiuta di sovrascrivere una destinazione esistente. Le pipeline interne che
 alimentano registry e profili non fanno parte del repository pubblico.
+
+Per consegnare a un valutatore esterno soltanto i profili gold dei task che ha
+ricevuto, il builder accetta un sottoinsieme di task (`--task-ids` oppure
+`--task-ids-file`, un `task_id` per riga); il registry resta completo, perché
+non contiene informazioni sui task:
+
+```bash
+python scripts/build_public_grounding_bundle.py \
+  --registry /percorso/ecli_registry_v1.sqlite \
+  --profiles /percorso/question_profiles \
+  --task-ids-file task_ids_partner.txt \
+  --out-dir legalita-grounding-bundle-partner \
+  --zip
+```
+
+Il builder si ferma se manca il profilo di uno dei task richiesti. Con un
+bundle parziale, `legalita-grounding` calcola GOG e Coverage sui task
+presenti nell'input; `index.json` e `manifest.json` riportano quanti profili
+contiene il bundle.
 
 ## Problemi comuni
 
