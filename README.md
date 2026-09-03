@@ -264,22 +264,181 @@ python run_bullshit_v2.py --models gpt-4o --limit 1 \
   --judge-c-provider anthropic --judge-c-model claude-opus-4-8
 ```
 
-## Citation Grounding
+## Citation Grounding — now available in the open release
 
-Citation grounding is separate from legal-reasoning scoring. It extracts the
-rulings cited in an answer, checks their identity against the local registry,
-and compares them with the profile of the corresponding question. The command
-reports the GOG and Coverage metrics without contacting an Aptus service:
+Citation grounding runs entirely on local files. The registry of ECLI
+identifiers and the 67 per-task gold profiles used for the comparison are
+already built and are distributed as a single ZIP bundle, on request, so that
+nobody has to rebuild them. Ask for it by e-mail, with subject
+"grounding bundle legalITA", to the addresses listed above.
+
+SHA-256 of `legalita_grounding_bundle.zip` (about 40 MB compressed, 190 MB
+extracted):
+
+```text
+28a99ea160e68102d1dd8566056856e430f6c35e7f46bf3b22f3fe080ae64f38
+```
+
+### What the bundle contains
+
+```text
+legalita-grounding-bundle/
+├── manifest.json                     snapshot date, row counts, checksums
+├── registry/
+│   └── ecli_registry_v1.sqlite       read-only registry of ECLI identifiers
+└── question_profiles/
+    ├── index.json
+    └── <macro-area>_<task>.json      67 gold profiles, one per task
+```
+
+### Where to put it
+
+The runtime looks for the bundle in `data/citation_pool/`, at the project
+root (the same directory that contains `pyproject.toml`). Do not rename the
+files or the folders. From the project root:
+
+```bash
+unzip legalita_grounding_bundle.zip -d /tmp/legalita-bundle
+mkdir -p data/citation_pool
+cp -R /tmp/legalita-bundle/legalita-grounding-bundle/. data/citation_pool/
+```
+
+The result must be exactly:
+
+```text
+LegalITA/
+└── data/
+    └── citation_pool/
+        ├── manifest.json
+        ├── registry/ecli_registry_v1.sqlite
+        └── question_profiles/index.json  (+ 67 task files)
+```
+
+`data/` is ignored by Git, so the bundle never ends up in a commit. If you
+keep the bundle elsewhere, point the runtime to it with
+`--citation-registry` / `--question-profiles`, or with the environment
+variables `LEGALITA_CITATION_REGISTRY_PATH` and
+`LEGALITA_QUESTION_PROFILES_DIR`.
+
+### Check the installation
+
+```bash
+shasum -a 256 data/citation_pool/registry/ecli_registry_v1.sqlite
+# must match "registry/ecli_registry_v1.sqlite" in data/citation_pool/manifest.json
+
+legalita-grounding --results results/<provider>/<run> --backend local --fast-path
+```
+
+The second command must print a `GOG=... Coverage=... backend=local
+registry=<snapshot date>` line. If it prints `Registry locale non trovato` or
+`Question profiles non trovati`, the bundle is not in the expected location.
+
+### Run it
+
+Ground a completed run (a directory containing `scores.json` or
+`outputs.json`), or a CSV of answers from an external system (matched by
+`task_id`, or by question text when the column is missing):
 
 ```bash
 legalita-grounding --results results/<provider>/<run> --backend local
+legalita-grounding --csv answers.csv --model SYSTEM_NAME --backend local
 ```
 
-The registry and question profiles (about 190 MB) are distributed separately
-because the registry is too large for the source repository. Like the task
-bundle, they are available on request at the e-mail addresses above, with
-subject "grounding bundle legalITA". Setup, bundle layout, snapshot limits and
-report semantics are documented in
+The report is written to
+`results/grounding-offline/<run>/citation_grounding_v3.{json,md}`. The only
+network call is the citation extractor (`OPENAI_API_KEY`); `--fast-path` skips
+it and evaluates explicit ECLI identifiers only. Use `--task-ids` for a quick
+trial on a few tasks. Reports are comparable only when produced with the same
+bundle: the snapshot date is recorded in every report. Statuses, snapshot
+limits and troubleshooting are documented in
+[docs/CITATION_GROUNDING.md](docs/CITATION_GROUNDING.md).
+
+## Citation Grounding — ora disponibile nella release aperta
+
+Il citation grounding lavora interamente su file locali. Il registry degli
+identificativi ECLI e i 67 profili gold per task usati nel confronto sono già
+costruiti e vengono distribuiti in un unico pacchetto ZIP, su richiesta, così
+che nessuno debba ricostruirli. Si richiede via e-mail, con oggetto
+"grounding bundle legalITA", agli indirizzi indicati sopra.
+
+SHA-256 di `legalita_grounding_bundle.zip` (circa 40 MB compresso, 190 MB
+estratto):
+
+```text
+28a99ea160e68102d1dd8566056856e430f6c35e7f46bf3b22f3fe080ae64f38
+```
+
+### Contenuto del pacchetto
+
+```text
+legalita-grounding-bundle/
+├── manifest.json                     data dello snapshot, conteggi, checksum
+├── registry/
+│   └── ecli_registry_v1.sqlite       registry in sola lettura degli ECLI
+└── question_profiles/
+    ├── index.json
+    └── <macro-area>_<task>.json      67 profili gold, uno per task
+```
+
+### Dove va posizionato
+
+Il runtime cerca il pacchetto in `data/citation_pool/`, nella root del
+progetto (la stessa cartella che contiene `pyproject.toml`). Non rinominare
+file né cartelle. Dalla root del progetto:
+
+```bash
+unzip legalita_grounding_bundle.zip -d /tmp/legalita-bundle
+mkdir -p data/citation_pool
+cp -R /tmp/legalita-bundle/legalita-grounding-bundle/. data/citation_pool/
+```
+
+Il risultato deve essere esattamente:
+
+```text
+LegalITA/
+└── data/
+    └── citation_pool/
+        ├── manifest.json
+        ├── registry/ecli_registry_v1.sqlite
+        └── question_profiles/index.json  (+ 67 file dei task)
+```
+
+`data/` è ignorata da Git, quindi il pacchetto non finisce mai in un commit.
+Se preferisci tenerlo altrove, indica il percorso con `--citation-registry` /
+`--question-profiles`, oppure con le variabili d'ambiente
+`LEGALITA_CITATION_REGISTRY_PATH` e `LEGALITA_QUESTION_PROFILES_DIR`.
+
+### Verifica dell'installazione
+
+```bash
+shasum -a 256 data/citation_pool/registry/ecli_registry_v1.sqlite
+# deve coincidere con "registry/ecli_registry_v1.sqlite" in data/citation_pool/manifest.json
+
+legalita-grounding --results results/<provider>/<run> --backend local --fast-path
+```
+
+Il secondo comando deve stampare una riga `GOG=... Coverage=... backend=local
+registry=<data snapshot>`. Se stampa `Registry locale non trovato` o
+`Question profiles non trovati`, il pacchetto non è nella posizione attesa.
+
+### Esecuzione
+
+Grounding di una run già eseguita (directory con `scores.json` o
+`outputs.json`), oppure di un CSV di risposte di un sistema esterno (associate
+per `task_id`, o per testo della domanda se la colonna manca):
+
+```bash
+legalita-grounding --results results/<provider>/<run> --backend local
+legalita-grounding --csv risposte.csv --model NOME_SISTEMA --backend local
+```
+
+Il report viene scritto in
+`results/grounding-offline/<run>/citation_grounding_v3.{json,md}`. L'unica
+chiamata di rete è l'estrattore di citazioni (`OPENAI_API_KEY`); `--fast-path`
+la evita e valuta solo gli ECLI espliciti. `--task-ids` permette una prova
+rapida su pochi task. I report sono confrontabili solo se prodotti con lo
+stesso pacchetto: la data dello snapshot è registrata in ogni report. Stati,
+limiti dello snapshot e problemi comuni sono documentati in
 [docs/CITATION_GROUNDING.md](docs/CITATION_GROUNDING.md).
 
 ## Canonical Taxonomy
@@ -314,11 +473,27 @@ unknown combinations             -> excluded with warning
 
 ## Pipeline Commands
 
+The corpus-preprocessing and task-generation commands below require
+`data/raw/sentenze.zip`, an internal export of Cassation rulings (per-ruling
+facts, principles and decision) that is not distributed. They are used by the
+maintainers to build new tasks; external users do not need them, since the
+107 tasks are delivered already built in the task bundle. Neither the
+benchmark nor the citation grounding needs the text of any ruling: grounding
+works on ECLI identifiers only.
+
+I comandi di preprocessing del corpus e di generazione dei task richiedono
+`data/raw/sentenze.zip`, un export interno delle sentenze di Cassazione
+(fatti, principi e decisione per ciascun provvedimento) che non è distribuito.
+Servono ai manutentori per costruire nuovi task; gli utenti esterni non ne
+hanno bisogno, perché i 107 task arrivano già costruiti nel bundle. Né il
+benchmark né il citation grounding richiedono il testo delle sentenze: il
+grounding lavora solo su identificativi ECLI.
+
 ```bash
-# Preprocess the Cassation corpus
+# Preprocess the Cassation corpus (maintainers only, needs data/raw/sentenze.zip)
 legalita-build-corpus
 
-# Build future tasks with canonical slugs
+# Build future tasks with canonical slugs (maintainers only)
 python -m benchmark.task_builder --n-per-area 50
 
 # Build tasks for one area; historical aliases are accepted
@@ -366,19 +541,19 @@ data/private/bullshit_tasks_v3_missing_documents_40.json  40 missing-document ta
 Not distributed with the public project:
 
 ```text
-data/raw/sentenze.zip
+data/raw/sentenze.zip          internal rulings export, maintainers only
 artifacts/
 results/
 .env
 internal workflow, application backend, and gold-building components
 ```
 
-Distributed separately, on request, as a grounding bundle:
+Distributed separately, on request, as `legalita_grounding_bundle.zip`:
 
 ```text
 data/citation_pool/registry/ecli_registry_v1.sqlite     ECLI registry snapshot
-data/citation_pool/question_profiles/                   67 question profiles
-data/citation_pool/manifest.json                        counts and checksums
+data/citation_pool/question_profiles/                   67 gold question profiles
+data/citation_pool/manifest.json                        snapshot date, counts and checksums
 ```
 
 Included in the repository:

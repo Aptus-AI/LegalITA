@@ -32,10 +32,21 @@ Il codice si installa con:
 python -m pip install -e .
 ```
 
-Il bundle registry + profili è distribuito separatamente dal codice, perché il
-registry è troppo grande per il repository sorgente. Si richiede via e-mail agli
-stessi contatti indicati nel README per il bundle dei task, con oggetto
-"grounding bundle legalITA". Estrarlo in modo da ottenere:
+Il bundle registry + profili (`legalita_grounding_bundle.zip`, SHA-256 nel
+README) è distribuito separatamente dal codice, già costruito: il registry è
+troppo grande per il repository sorgente e i profili gold non sono
+ricostruibili senza le pipeline interne. Si richiede via e-mail agli stessi
+contatti indicati nel README per il bundle dei task, con oggetto "grounding
+bundle legalITA". Lo zip contiene una cartella `legalita-grounding-bundle/`;
+il suo contenuto va copiato in `data/citation_pool/` nella root del progetto:
+
+```bash
+unzip legalita_grounding_bundle.zip -d /tmp/legalita-bundle
+mkdir -p data/citation_pool
+cp -R /tmp/legalita-bundle/legalita-grounding-bundle/. data/citation_pool/
+```
+
+Risultato atteso:
 
 ```text
 data/citation_pool/
