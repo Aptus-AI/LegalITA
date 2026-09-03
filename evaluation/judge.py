@@ -17,8 +17,8 @@ from openai import OpenAI
 from openai import RateLimitError as OpenAIRateLimitError
 from pydantic import BaseModel, ValidationError
 
-from config import JUDGE_MAX_TOKENS, JUDGE_MODEL, JUDGE_RETRIES, JUDGE_TEMPERATURE
-from schemas import ConsensusResult, JudgeId, JudgeProvider, JudgeVerdict, JudgeVote
+from legal_ita.config import JUDGE_MAX_TOKENS, JUDGE_MODEL, JUDGE_RETRIES, JUDGE_TEMPERATURE
+from legal_ita.schemas import ConsensusResult, JudgeId, JudgeProvider, JudgeVerdict, JudgeVote
 
 log = logging.getLogger(__name__)
 
@@ -703,7 +703,7 @@ def _build_provider_judge(endpoint: Any) -> BaseJudge:
 
 def create_judge_from_config(runtime_config: Any | None = None, **overrides: Any) -> BaseJudge | AdaptiveMajorityJudge:
     """Crea un judge singolo o adattivo dalla configurazione runtime."""
-    from config import build_judge_runtime_config, validate_judge_runtime_config
+    from legal_ita.config import build_judge_runtime_config, validate_judge_runtime_config
 
     config = runtime_config or build_judge_runtime_config(**overrides)
     validate_judge_runtime_config(config)

@@ -1,10 +1,23 @@
-# Dati — input privati e output generati, mai su GitHub
+# Dati distribuiti separatamente e output generati
 data/
 results/
 tasks/
 artifacts/
 _incoming/
 *.csv
+*.sqlite
+*.sqlite-shm
+*.sqlite-wal
+
+# Componenti interni: non fanno parte della distribuzione pubblica
+task_workflow2.0/
+task_workflow2.0.1/
+tasks_agentic_workflow/
+legalita_api/
+legal_ita/agentic/
+gold_builder/
+output/
+tmp/
 
 # Credenziali
 .env
@@ -21,7 +34,6 @@ __pycache__/
 *.py[cod]
 .venv/
 venv/
-tests/
 .tmp/
 
 # OS / editor

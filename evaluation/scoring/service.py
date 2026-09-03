@@ -31,24 +31,20 @@ from typing import Any
 from datetime import datetime, timezone
 
 try:
-    from evaluation.citations.service import CitationExistenceService
     from evaluation.grounding_metrics import enrich_grounding_summary
 except ImportError:
-    # Distribuzione pubblica: il modulo di citation grounding non e' incluso.
-    # Il benchmark funziona solo con citation_grounding_enabled=False.
-    CitationExistenceService = None
     enrich_grounding_summary = None
 from evaluation.judge import Judge
-from schemas import BenchmarkTask, ConsensusResult, CriterionResult, JudgeVote, TaskScore
-from usage_tracking import aggregate_model_call_metrics
+from legal_ita.schemas import BenchmarkTask, ConsensusResult, CriterionResult, JudgeVote, TaskScore
+from legal_ita.modeling.usage import aggregate_model_call_metrics
 
 log = logging.getLogger(__name__)
 
 PUBLIC_CITATION_STATUSES = (
-    "resolved_pinecone_exact",
-    "resolved_pinecone_incomplete",
-    "resolved_pinecone_metadata_mismatch",
-    "ambiguous_pinecone",
+    "resolved_local_registry_exact",
+    "resolved_local_registry_incomplete",
+    "resolved_local_registry_metadata_mismatch",
+    "ambiguous_local_registry",
     "not_found_in_index",
     "suspected_fabricated",
     "confirmed_fabricated",
@@ -66,13 +62,13 @@ class CitationGroundingError(RuntimeError):
 
 def public_citation_status(status: str) -> str:
     if status == "resolved":
-        return "resolved_pinecone_exact"
+        return "resolved_local_registry_exact"
     if status == "not_found":
         return "not_found_in_index"
     if status == "insufficient_data":
         return "not_found_in_index"
     if status == "ambiguous":
-        return "ambiguous_pinecone"
+        return "ambiguous_local_registry"
     if status in PUBLIC_CITATION_STATUSES:
         return status
     return "resolver_error"
@@ -143,10 +139,10 @@ def evaluate_citation_existence(
     confirmed = sum(
         int(counts.get(status, 0) or 0)
         for status in (
-            "resolved_pinecone_exact",
-            "resolved_pinecone_incomplete",
-            "resolved_pinecone_metadata_mismatch",
-            "ambiguous_pinecone",
+            "resolved_local_registry_exact",
+            "resolved_local_registry_incomplete",
+            "resolved_local_registry_metadata_mismatch",
+            "ambiguous_local_registry",
         )
     )
     status = "not_cited" if extracted == 0 else "complete"
@@ -163,7 +159,7 @@ def evaluate_citation_existence(
             "confirmed_count": confirmed,
             "unresolved_count": unresolved,
             "fabricated_count": fabricated,
-            "pinecone_only": True,
+            "local_registry_only": True,
         },
         citation_results=[dict(item) for item in citation_results],
     )
@@ -240,7 +236,7 @@ def format_citation_context(citation_results: list[dict], citation_counts: dict[
                 "existence_confirmed": result.get("existence_confirmed"),
                 "existence_source": result.get("existence_source"),
                 "identity_status": result.get("identity_status"),
-                "pinecone_status": result.get("pinecone_status"),
+                "local_registry_status": result.get("local_registry_status"),
                 "citation_accuracy": result.get("citation_accuracy"),
                 "metadata_mismatches": result.get("metadata_mismatches"),
                 "requested_ecli_candidates": result.get("requested_ecli_candidates"),
@@ -703,13 +699,13 @@ def _log_criterion_consensus(
 
 
 def score_task(
-        task: BenchmarkTask,
-        model_output: str,
-        model: str,
-        judge: Judge | None = None,
-        citation_service: CitationExistenceService | None = None,
-        citation_grounding_enabled: bool = True,
-        strict_citation_grounding: bool = False,
+    task: BenchmarkTask,
+    model_output: str,
+    model: str,
+    judge: Judge | None = None,
+    citation_service: Any | None = None,
+    citation_grounding_enabled: bool = False,
+    strict_citation_grounding: bool = False,
 ) -> TaskScore:
     """
     Valuta la risposta di un modello su un singolo task.
@@ -737,13 +733,11 @@ def score_task(
     citation_scoring_applicable = is_citation_scoring_applicable(task)
 
     if citation_grounding_enabled and citation_scoring_applicable:
-        if citation_service is None and CitationExistenceService is None:
+        if citation_service is None:
             raise RuntimeError(
-                "Citation grounding non disponibile in questa distribuzione: "
-                "eseguire con citation grounding disattivato "
-                "(--skip-citation-grounding)."
+                "Per integrare il grounding nello scoring serve un citation_service esplicito. "
+                "Il comando pubblico legalita-grounding viene eseguito separatamente."
             )
-        citation_service = citation_service or CitationExistenceService()
         registry_info = citation_service.get_registry_info()
         citation_registry_built_at = registry_info.get("built_at")
         citation_registry_index_name = registry_info.get("index_name")
@@ -1034,13 +1028,13 @@ def _pct(value: Any) -> str:
 
 
 def score_batch(
-        tasks: list[BenchmarkTask],
-        outputs: dict[str, str],
-        model: str,
-        judge: Judge | None = None,
-        citation_service: CitationExistenceService | None = None,
-        citation_grounding_enabled: bool = True,
-        strict_citation_grounding: bool = False,
+    tasks: list[BenchmarkTask],
+    outputs: dict[str, str],
+    model: str,
+    judge: Judge | None = None,
+    citation_service: Any | None = None,
+    citation_grounding_enabled: bool = False,
+    strict_citation_grounding: bool = False,
 ) -> list[TaskScore]:
     """
     Valuta le risposte di un modello su una lista di task.

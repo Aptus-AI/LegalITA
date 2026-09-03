@@ -24,15 +24,15 @@ from openai import OpenAI
 from openai import RateLimitError as OpenAIRateLimitError
 from pydantic import BaseModel, Field, field_validator
 
-from config import (
+from legal_ita.config import (
     JUDGE_MAX_TOKENS,
     JUDGE_MODEL,
     JUDGE_RETRIES,
     JUDGE_TEMPERATURE,
 )
 from evaluation.judge import _load_json_object, _normalize_verdict_values, _temperature_kwargs
-from schemas import ConsensusMethod, JudgeId, JudgeProvider, JudgeVote
-from usage_tracking import aggregate_model_call_metrics
+from legal_ita.schemas import ConsensusMethod, JudgeId, JudgeProvider, JudgeVote
+from legal_ita.modeling.usage import aggregate_model_call_metrics
 
 log = logging.getLogger(__name__)
 
@@ -1058,7 +1058,7 @@ def create_bullshit_judge_from_config(
     **overrides: Any,
 ) -> BullshitJudge | SingleBullshitVoteJudge | AdaptiveMajorityBullshitJudge:
     """Crea un judge bullshit single o adaptive usando la configurazione condivisa."""
-    from config import build_judge_runtime_config, validate_judge_runtime_config
+    from legal_ita.config import build_judge_runtime_config, validate_judge_runtime_config
 
     config = runtime_config or build_judge_runtime_config(**overrides)
     validate_judge_runtime_config(config)

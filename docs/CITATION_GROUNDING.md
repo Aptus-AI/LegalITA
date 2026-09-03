@@ -1,220 +1,292 @@
-# Citation Grounding and Structural Gold v3
+# Citation grounding locale (`legalita-grounding --backend local`)
 
-This document explains how the LegalITA citation-grounding and Structural Gold
-v3 pipelines work, and why their implementation is not part of the public
-repository. The public distribution runs the benchmark **only with citation
-grounding disabled** (`--skip-citation-grounding`).
+Il citation grounding è separato dallo scoring giuridico. Il judge risponde
+alla domanda "la risposta soddisfa i criteri PASS/FAIL del task?"; il grounding
+risponde a due domande diverse, per ogni sentenza citata nella risposta:
 
-## What citation grounding is
+1. **Identità**: la decisione citata esiste ed è identificabile in modo univoco?
+2. **Rilevanza**: quella decisione risolve la questione posta dal quesito?
 
-Citation grounding is independent from legal reasoning evaluation. The judge
-score answers the question "does the answer satisfy the legal PASS/FAIL
-criteria of the task?"; citation grounding answers a different question: "do
-the rulings cited in the answer actually exist, and are they the rulings the
-task requires?"
+Il backend `local` risponde a entrambe con due file distribuiti a parte, senza
+contattare alcun servizio Aptus: un **registry ECLI** in SQLite (snapshot
+versionato dell'indice delle decisioni) e un **question profile** per ciascuno
+dei 67 task. L'unica chiamata di rete che resta è quella all'estrattore di
+citazioni (un modello OpenAI, vedi sotto), evitabile con `--fast-path` quando
+le citazioni sono già espresse come ECLI espliciti.
 
-Existence and relevance are two separate gates:
+Il calcolo è fail-closed: citazioni ambigue o non verificabili restano
+`unresolved` e non ricevono mai credito.
 
-- **Existence**: does the citation identify a real, verifiable judicial
-  decision?
-- **Relevance**: is the identified decision one of the rulings required or
-  accepted by the gold annotation of that task?
+## Cosa serve
 
-A ruling can exist and still be out of gold (it fails relevance); a citation
-can match the gold identity while its existence remains unresolved. When the
-ambiguity could change the result, the task-level citation verdict stays
-`unresolved` rather than guessing.
+| Cosa | Dove | Note |
+|---|---|---|
+| Registry ECLI | `data/citation_pool/registry/ecli_registry_v1.sqlite` | ~190 MB, sola lettura. Namespace inclusi nello snapshot corrente: `CASS` (Cassazione), `MER` (tribunali e corti d'appello), `CONT` (Corte dei conti), `COST` (Corte costituzionale). La data dello snapshot è nella tabella `meta` (`built_at`) |
+| Manifest del bundle | `data/citation_pool/manifest.json` | conteggi per namespace e checksum SHA-256 dei file |
+| Question profiles | `data/citation_pool/question_profiles/<task>.json` + `index.json` | uno per task (`diritto_civile_0001.json`, ...): testo del quesito, `resolving_rulings` con tier di evidenza, decisioni marginali/irrilevanti recuperate |
+| Chiave OpenAI | `.env` → `OPENAI_API_KEY` | solo per l'estrattore di citazioni; non serve con `--fast-path` |
 
-## How the pipeline works
-
-```text
-model answer
--> LLM citation extractor (DeepSeek via Novita)
--> citation / ECLI normalization
--> Pinecone identity and metadata resolution
--> read-only S3 verification on structured court-ruling documents
--> grounding report per model
-```
-
-1. An LLM extractor parses the model answer and emits every jurisprudential
-   citation in a normalized structured form (court, section, number, year,
-   ECLI when derivable).
-2. Each citation is resolved against dedicated Pinecone indexes by identity
-   and metadata, not by semantic similarity: a semantic match may point to a
-   thematically similar but different ruling, so it is never accepted as proof
-   of identity.
-3. For Gold v3, resolved candidates are verified against structured court
-   ruling documents stored on S3 (read-only), which provide the authoritative
-   text and metadata.
-4. Every citation ends in an explicit status
-   (`resolved_pinecone_exact`, `ambiguous_pinecone`, `not_found_in_index`,
-   `suspected_fabricated`, `confirmed_fabricated`, …). Only
-   `confirmed_fabricated` — fabrication proven inside the Pinecone/S3
-   perimeter — produces a grounding hard fail. Everything unresolved stays
-   diagnostic.
-
-## What Structural Gold v3 is
-
-Structural Gold v3 is the gold-builder pipeline that produced the reference
-annotations. For each task it reconstructs the jurisprudential state of the
-legal question and returns an issue-state structural classification supported
-by retrieved case-law evidence:
-
-```text
-task query
--> Pinecone query retrieval on facts/principles indexes
--> ECLI deduplication
--> S3 hydration of structured ruling documents
--> controlled LLM semantic assessment
--> orientation grouping
--> structural classification with provenance
-```
-
-The retrieved rulings are evidence examples used to infer the state of the
-question; the resulting gold object carries citations, provenance and
-retrieval-coverage metadata for audit.
-
-## Why it is not replicable
-
-Both pipelines depend on infrastructure and data that cannot be redistributed:
-
-- **Private Pinecone indexes** (facts and principles) built over a proprietary
-  structured corpus of Italian Cassation rulings. Rebuilding them requires
-  both the source corpus and the ingestion pipeline, neither of which is
-  publicly distributable.
-- **Structured S3 documents**: the authoritative, machine-readable versions of
-  the rulings live in a private S3 bucket, produced by a proprietary document
-  structuring platform.
-- **Deployment credentials and naming**: index names, bucket names, prefixes,
-  AWS profiles and API keys are deployment-specific secrets.
-- **Corpus licensing**: the underlying case-law corpus cannot be re-published
-  as part of an open-source repository.
-
-Because a public copy of the code could never run — and to keep the public
-surface aligned with what is actually reproducible — the implementation
-(`evaluation/citations/`, `evaluation/grounding_metrics.py`, `gold_builder/`,
-the `structural_v3` scripts) is not distributed on GitHub. The scoring
-pipeline in this repository degrades gracefully: with citation grounding
-disabled, citation fields are reported as not applicable and the judge-based
-reasoning evaluation is unaffected.
-
-## What remains reproducible
-
-With the 107-task bundle and ordinary model/judge API keys:
+Il codice si installa con:
 
 ```bash
-python run_benchmark.py --models gpt-4o --skip-citation-grounding
-python run_bullshit_v2.py --models gpt-4o
+python -m pip install -e .
 ```
 
----
-
-# Citation Grounding e Structural Gold v3 (italiano)
-
-Questo documento spiega come funzionano le pipeline di citation grounding e
-Structural Gold v3 di LegalITA, e perché la loro implementazione non fa parte
-del repository pubblico. La distribuzione pubblica esegue il benchmark **solo
-con citation grounding disattivato** (`--skip-citation-grounding`).
-
-## Che cos'è il citation grounding
-
-Il citation grounding è indipendente dalla valutazione del ragionamento
-giuridico. Lo score del judge risponde alla domanda "la risposta soddisfa i
-criteri PASS/FAIL del task?"; il citation grounding risponde a una domanda
-diversa: "le sentenze citate nella risposta esistono davvero, e sono quelle
-richieste dal task?"
-
-Esistenza e pertinenza sono due gate separati:
-
-- **Esistenza**: la citazione identifica una decisione giudiziaria reale e
-  verificabile?
-- **Pertinenza**: la decisione identificata è una delle sentenze richieste o
-  accettate dal gold di quel task?
-
-Una sentenza può esistere ed essere fuori gold (fallisce la pertinenza); una
-citazione può coincidere con l'identità del gold mentre la sua esistenza resta
-non risolta. Quando l'ambiguità può cambiare il risultato, il verdetto
-citazionale del task resta `unresolved` invece di tirare a indovinare.
-
-## Come funziona la pipeline
-
-```text
-risposta del modello
--> estrattore LLM delle citazioni (DeepSeek via Novita)
--> normalizzazione citazioni / ECLI
--> risoluzione di identità e metadati su Pinecone
--> verifica read-only su documenti strutturati S3
--> report di grounding per modello
-```
-
-1. Un estrattore LLM analizza la risposta e produce ogni citazione
-   giurisprudenziale in forma strutturata normalizzata (corte, sezione,
-   numero, anno, ECLI quando derivabile).
-2. Ogni citazione viene risolta su indici Pinecone dedicati per identità e
-   metadati, non per similarità semantica: un match semantico può puntare a
-   una sentenza simile per tema ma diversa, quindi non è mai accettato come
-   prova di identità.
-3. Per il Gold v3, i candidati risolti vengono verificati sui documenti
-   strutturati delle sentenze conservati su S3 (in sola lettura), che
-   forniscono testo e metadati autoritativi.
-4. Ogni citazione termina in uno status esplicito
-   (`resolved_pinecone_exact`, `ambiguous_pinecone`, `not_found_in_index`,
-   `suspected_fabricated`, `confirmed_fabricated`, …). Solo
-   `confirmed_fabricated` — fabbricazione provata dentro il perimetro
-   Pinecone/S3 — produce un hard fail di grounding. Tutto ciò che resta non
-   risolto rimane diagnostico.
-
-## Che cos'è Structural Gold v3
-
-Structural Gold v3 è la pipeline di gold building che ha prodotto le
-annotazioni di riferimento. Per ogni task ricostruisce lo stato
-giurisprudenziale della questione giuridica e restituisce una classificazione
-strutturale sostenuta da evidenze giurisprudenziali recuperate:
-
-```text
-query del task
--> retrieval Pinecone su indici facts/principles
--> deduplicazione ECLI
--> idratazione S3 dei documenti strutturati
--> valutazione semantica LLM controllata
--> raggruppamento per orientamenti
--> classificazione strutturale con provenance
-```
-
-Le sentenze recuperate sono esempi di evidenza usati per inferire lo stato
-della questione; l'oggetto gold risultante conserva citazioni, provenance e
-metadati di copertura del retrieval a fini di audit.
-
-## Perché non è replicabile
-
-Entrambe le pipeline dipendono da infrastruttura e dati non redistribuibili:
-
-- **Indici Pinecone privati** (facts e principles) costruiti su un corpus
-  strutturato proprietario di sentenze di Cassazione. Ricostruirli richiede
-  sia il corpus sorgente sia la pipeline di ingestione, nessuno dei due
-  distribuibile pubblicamente.
-- **Documenti strutturati S3**: le versioni autoritative e machine-readable
-  delle sentenze risiedono in un bucket S3 privato, prodotte da una
-  piattaforma proprietaria di strutturazione documentale.
-- **Credenziali e naming di deployment**: nomi degli indici, bucket, prefissi,
-  profili AWS e API key sono segreti specifici del deployment.
-- **Licenze del corpus**: il corpus giurisprudenziale sottostante non può
-  essere ripubblicato in un repository open source.
-
-Poiché una copia pubblica del codice non potrebbe comunque essere eseguita — e
-per mantenere la superficie pubblica allineata a ciò che è davvero
-riproducibile — l'implementazione (`evaluation/citations/`,
-`evaluation/grounding_metrics.py`, `gold_builder/`, gli script
-`structural_v3`) non è distribuita su GitHub. La pipeline di scoring di questo
-repository degrada in modo controllato: con citation grounding disattivato i
-campi citazionali risultano non applicabili e la valutazione del ragionamento
-tramite judge non è influenzata.
-
-## Cosa resta riproducibile
-
-Con il pacchetto dei 107 task e normali API key di modello e judge:
+Il bundle registry + profili (`legalita_grounding_bundle.zip`, SHA-256 nel
+README) è distribuito separatamente dal codice, già costruito: il registry è
+troppo grande per il repository sorgente e i profili gold non sono
+ricostruibili senza le pipeline interne. Si richiede via e-mail agli stessi
+contatti indicati nel README per il bundle dei task, con oggetto "grounding
+bundle legalITA". Lo zip contiene una cartella `legalita-grounding-bundle/`;
+il suo contenuto va copiato in `data/citation_pool/` nella root del progetto:
 
 ```bash
-python run_benchmark.py --models gpt-4o --skip-citation-grounding
-python run_bullshit_v2.py --models gpt-4o
+unzip legalita_grounding_bundle.zip -d /tmp/legalita-bundle
+mkdir -p data/citation_pool
+cp -R /tmp/legalita-bundle/legalita-grounding-bundle/. data/citation_pool/
 ```
+
+Risultato atteso:
+
+```text
+data/citation_pool/
+├── manifest.json
+├── registry/
+│   └── ecli_registry_v1.sqlite
+└── question_profiles/
+    ├── index.json
+    └── <macro-area>_<numero-task>.json   (67 file)
+```
+
+`data/` è ignorata da Git. Percorsi alternativi possono essere indicati da
+riga di comando (`--citation-registry`, `--question-profiles`) o da ambiente:
+
+```text
+LEGALITA_CITATION_REGISTRY_PATH=data/citation_pool/registry/ecli_registry_v1.sqlite
+LEGALITA_QUESTION_PROFILES_DIR=data/citation_pool/question_profiles
+```
+
+### Estrattore di citazioni
+
+Le citazioni scritte in linguaggio naturale ("Cass. Sez. Un. n. 41994/2021",
+"ord. n. 20522 del 30 luglio 2019") vengono estratte da un modello OpenAI
+tramite Responses API. Il modello predefinito è quello usato nei report
+LegalITA ed è letto da `CITATION_EXTRACTOR_MODEL`; può essere cambiato con
+`--extractor-model` o nel `.env`:
+
+```text
+OPENAI_API_KEY=...
+CITATION_EXTRACTOR_MODEL=<modello OpenAI con Responses API e output strutturato>
+```
+
+Un estrattore diverso da quello predefinito produce risultati non
+confrontabili con i report ufficiali: il modello usato è registrato nel JSON
+di output.
+
+## Comandi
+
+Con il bundle installato, `legalita-benchmark` esegue il grounding offline di
+default al termine dello scoring: verifica la presenza del bundle prima di
+qualsiasi chiamata API, scrive `citation_grounding_v3.{json,md}` nella cartella
+della run e aggiunge `gog`, `coverage`, `gog_backend`, `registry_built_at` e
+`citation_grounding_status` al `summary.json`. Un errore del grounding non
+invalida lo scoring: viene registrato come `citation_grounding_error`. Il
+denominatore delle medie è il numero di task della run (67 per una run
+completa, meno con `--limit` o `--area`). Con `--skip-citation-grounding` si
+esegue il solo scoring giuridico.
+
+```bash
+legalita-benchmark --models gpt-4o                             # scoring + grounding
+legalita-benchmark --models gpt-4o --skip-citation-grounding   # solo scoring
+```
+
+Il comando `legalita-grounding` esegue invece il grounding da solo.
+
+Grounding di una run già eseguita, cioè una directory che contiene
+`scores.json` (prodotto da `legalita-benchmark`) oppure `outputs.json`, una
+lista di oggetti con `task_id` e `model_output` (o `response`):
+
+```bash
+legalita-grounding --results results/<provider>/<run> --backend local
+```
+
+Da un CSV di risposte esterne. Se il CSV ha una colonna `task_id` viene usata;
+altrimenti la colonna della domanda viene associata al testo del quesito
+presente nei question profiles:
+
+```bash
+legalita-grounding --csv risposte.csv --model NOME_SISTEMA --backend local
+
+legalita-grounding --csv risposte.csv --model NOME_SISTEMA --backend local \
+  --question-column Domanda --answer-column Risposta
+```
+
+Opzioni utili:
+
+```text
+--task-ids diritto_civile/0001 lavoro/0003   prova su pochi task
+--n-tasks N                                  denominatore delle medie; default: numero di
+                                             task distinti nell'input. 67 per confrontare
+                                             con il benchmark completo
+--fast-path                                  salta l'estrattore LLM: valuta solo
+                                             ECLI espliciti e URL riconoscibili
+--extractor-model / --extractor-timeout-seconds / --extractor-max-retries
+--out-dir                                    directory del report
+```
+
+`--backend` accetta solo `local`: è esplicito per distinguere i report da
+quelli prodotti dalla pipeline interna, che non è distribuita.
+
+## Cosa succede dentro
+
+1. **Estrazione.** Da ogni risposta si raccolgono le citazioni attraverso tre
+   canali fusi insieme: URL che contengono un ECLI, ECLI scritti in chiaro
+   (regex) e, per tutto il resto, l'estrattore LLM. Con `--fast-path`
+   l'estrattore viene saltato; le citazioni testuali che non sono ECLI
+   completi risultano allora non estratte, e il report lo segnala
+   (`fast_path_skipped`).
+2. **Identità.** Ogni citazione viene trasformata in uno o più ECLI candidati
+   (per la Cassazione, numero e anno generano la variante civile e quella
+   penale) e cercata nel registry locale
+   (`evaluation/citations/local_registry.py`, `local_resolver.py`). Esiti:
+
+   ```text
+   resolved_local_registry_exact              trovata, metadati coerenti
+   resolved_local_registry_incomplete         trovata, citazione priva di alcuni elementi
+   resolved_local_registry_metadata_mismatch  trovata, ma sezione/data/tipo non coincidono
+   ambiguous_local_registry                   più candidati, nessun elemento per scegliere
+   not_found_in_index                         nessun candidato nel registry
+   outside_index_scope                        decisione di corti non italiane (CEDU, CGUE):
+                                              fuori dal perimetro del registry
+   ```
+
+3. **Rilevanza.** Gli ECLI risolti vengono confrontati con il profilo del
+   quesito: se compaiono tra le `resolving_rulings` la citazione è
+   `issue_aligned`; se compaiono tra le decisioni recuperate ma non risolutive è
+   `retrieved_only`; altrimenti `outside_profile`. Le citazioni
+   `not_found_in_index` diventano `fabricated_or_not_found`, salvo che il
+   registry non possa pronunciarsi (vedi limiti): in quel caso restano
+   `unresolved` con una `offline_coverage_note`. Ambigue e con metadati
+   discordanti restano `unresolved`.
+4. **Metriche.** Per il task `i`:
+
+   ```text
+   GOG_i      = citazioni issue_aligned / citazioni estratte   (0 se non cita nulla)
+   Coverage_i = 1 se almeno una citazione è issue_aligned, altrimenti 0
+   ```
+
+   GOG e Coverage sono le medie per task. Il denominatore è, di default, il
+   numero di task distinti presenti nell'input (dopo `--task-ids`): chi valuta
+   un sottoinsieme di 40 task ottiene medie su 40. Dentro `legalita-benchmark`
+   è il numero di task della run. Per confrontare un sistema con il benchmark
+   completo si forza `--n-tasks 67`: i task assenti dall'input contano allora
+   zero. Il denominatore usato è riportato a schermo (`Tasks=N`) e nel summary
+   (`gog_tasks_total`).
+
+## Output
+
+Ogni esecuzione scrive in una nuova directory (se il percorso predefinito
+esiste già viene aggiunto un timestamp):
+
+```text
+results/grounding-offline/<run>/citation_grounding_v3.json   report completo
+results/grounding-offline/<run>/citation_grounding_v3.md     tabella per task
+```
+
+A schermo:
+
+```text
+GOG=xx.x%  Coverage=xx.x%  Tasks=<N>  backend=local  registry=<data snapshot>
+results=<directory del report>
+```
+
+Nel JSON ogni citazione porta lo stato di identità (`final_status`),
+l'`matched_ecli`, la relazione con il profilo (`gold_v3_relation`),
+`issue_profile_match`, i tier di evidenza delle sentenze del profilo
+corrispondenti (`offline_tiers`, es. `A_lawyer_bonus`, `A_criteria_slot`,
+`B_gold_relevant`) e, quando serve, `offline_coverage_note`. Il `summary`
+contiene `gog`, `coverage`, `gog_by_task`, `coverage_by_task`,
+`gog_backend="local"` e `registry_built_at`. Due report sono confrontabili solo
+se dichiarano lo stesso snapshot del registry e la stessa versione dei profili.
+
+I file `summary.json` prodotti da `legalita-benchmark` contengono anche campi
+come `global_grounding` e `required_citation_coverage_rate`: sono metriche del
+vecchio citation gold interno, non GOG e Coverage. GOG e Coverage sono i campi
+`gog` e `coverage`, presenti solo quando il grounding offline è stato eseguito.
+
+## Limiti dello snapshot
+
+Il registry è una fotografia: quello che non contiene non può essere né
+confermato né smentito. Il report distingue questi casi dalle citazioni
+inventate.
+
+- **Giurisdizioni italiane non incluse nello snapshot** (es. Corti di
+  giustizia tributaria, TAR e Consiglio di Stato, ABF): le citazioni restano
+  `unresolved` con nota `giurisdizione [...] non presente nel registry
+  offline`, mai `fabricated`.
+- **Annate di Cassazione poco coperte** (in pratica, le decisioni anteriori
+  al 2014): `not_found_in_index` con nota `copertura CASS insufficiente per
+  l'anno [...]`.
+- **Omonimi civile/penale** citati senza sezione (es. "Cass. n. 8053/2014"
+  quando esistono sia la CIV sia la PEN): `ambiguous_local_registry`, quindi
+  `unresolved`. Basta indicare la sezione perché la citazione si risolva.
+- **Decisioni di merito citate senza ECLI** ("Trib. Milano, 12 marzo 2021"):
+  non verificabili offline, `unresolved` con nota.
+- **Decisioni successive a `built_at`**: sconosciute al registry.
+- **Estrattore LLM**: tra due esecuzioni può segmentare diversamente le
+  citazioni multiple. Questo vale per qualsiasi pipeline basata su estrazione
+  LLM; `--fast-path` elimina la variabilità ma copre solo gli ECLI espliciti.
+
+## Produrre o aggiornare un bundle
+
+Chi dispone di un registry compatibile (tabelle `registry` e `meta` con lo
+stesso schema) e di una directory di question profiles può generare un bundle
+nel formato pubblico minimo con:
+
+```bash
+python scripts/build_public_grounding_bundle.py \
+  --registry /percorso/ecli_registry_v1.sqlite \
+  --profiles /percorso/question_profiles \
+  --out-dir legalita-grounding-bundle \
+  --zip
+```
+
+Il builder usa solo la libreria standard, conserva i soli campi necessari al
+runtime, scrive `manifest.json` nella root del bundle con conteggi e checksum, e
+rifiuta di sovrascrivere una destinazione esistente. Le pipeline interne che
+alimentano registry e profili non fanno parte del repository pubblico.
+
+Per consegnare a un valutatore esterno soltanto i profili gold dei task che ha
+ricevuto, il builder accetta un sottoinsieme di task (`--task-ids` oppure
+`--task-ids-file`, un `task_id` per riga); il registry resta completo, perché
+non contiene informazioni sui task:
+
+```bash
+python scripts/build_public_grounding_bundle.py \
+  --registry /percorso/ecli_registry_v1.sqlite \
+  --profiles /percorso/question_profiles \
+  --task-ids-file task_ids_partner.txt \
+  --out-dir legalita-grounding-bundle-partner \
+  --zip
+```
+
+Il builder si ferma se manca il profilo di uno dei task richiesti. Con un
+bundle parziale, `legalita-grounding` calcola GOG e Coverage sui task
+presenti nell'input; `index.json` e `manifest.json` riportano quanti profili
+contiene il bundle.
+
+## Problemi comuni
+
+- `Registry locale non trovato` / `Question profiles non trovati` → il bundle
+  non è stato estratto in `data/citation_pool/`, oppure
+  `LEGALITA_CITATION_REGISTRY_PATH` / `LEGALITA_QUESTION_PROFILES_DIR` puntano
+  altrove.
+- `OPENAI_API_KEY non impostata in .env` → serve la chiave per l'estrattore,
+  oppure usare `--fast-path` se le risposte contengono ECLI espliciti.
+- `Formato risultati non valido` → `outputs.json` deve essere una lista di
+  oggetti con `task_id` e `model_output`; una directory di
+  `legalita-benchmark` contiene già `scores.json` nel formato giusto.
+- Molte citazioni `unresolved` con `offline_coverage_note` → sono limiti dello
+  snapshot, non errori: vedere la sezione precedente.
+- Tempi lunghi o timeout dell'estrattore → `--extractor-timeout-seconds`,
+  oppure `--task-ids` a blocchi.
