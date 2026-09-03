@@ -22,15 +22,15 @@ from pathlib import Path
 
 import anthropic
 
-from config import (
+from legal_ita.config import (
     BUILDER_TEMPERATURE,
     GENERATOR_MODEL,
     MAX_CRITERIA,
     MAX_SOURCE_PRINCIPLES,
     TASKS_DIR,
 )
-from schemas import BenchmarkTask, Criterion, Provvedimento
-from taxonomy import normalize_macro_area
+from legal_ita.schemas import BenchmarkTask, Criterion, Provvedimento
+from legal_ita.taxonomy import normalize_macro_area
 
 log = logging.getLogger(__name__)
 
@@ -582,7 +582,7 @@ if __name__ == "__main__":
 
     from benchmark.corpus import load_corpus_by_area
     from benchmark.generator import QueryGenerator, generate_batch
-    from config import RANDOM_SEED
+    from legal_ita.config import RANDOM_SEED
 
     load_dotenv()
 

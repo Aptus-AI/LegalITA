@@ -22,11 +22,11 @@ from typing import Any
 
 import anthropic
 
-from config import (
+from legal_ita.config import (
     GENERATOR_MODEL,
     MAX_SOURCE_PRINCIPLES,
 )
-from schemas import Provvedimento
+from legal_ita.schemas import Provvedimento
 
 log = logging.getLogger(__name__)
 

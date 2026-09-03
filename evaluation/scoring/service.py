@@ -35,8 +35,8 @@ try:
 except ImportError:
     enrich_grounding_summary = None
 from evaluation.judge import Judge
-from schemas import BenchmarkTask, ConsensusResult, CriterionResult, JudgeVote, TaskScore
-from usage_tracking import aggregate_model_call_metrics
+from legal_ita.schemas import BenchmarkTask, ConsensusResult, CriterionResult, JudgeVote, TaskScore
+from legal_ita.modeling.usage import aggregate_model_call_metrics
 
 log = logging.getLogger(__name__)
 

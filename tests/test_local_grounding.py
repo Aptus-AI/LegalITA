@@ -8,7 +8,7 @@ import unittest
 from contextlib import redirect_stdout
 from pathlib import Path
 
-from evaluation.citation_grounding import QuestionProfile, _ground_citation, main
+from legal_ita.grounding.service import QuestionProfile, _ground_citation, main
 from evaluation.citations.local_registry import LocalRegistryIndex
 from evaluation.citations.local_resolver import LocalCitationResolver
 from evaluation.citations.models import Citation

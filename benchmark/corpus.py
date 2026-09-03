@@ -16,9 +16,9 @@ import logging
 import random
 from pathlib import Path
 
-from config import CORPUS_JSONL, RANDOM_SEED
-from schemas import Provvedimento
-from taxonomy import normalize_macro_area
+from legal_ita.config import CORPUS_JSONL, RANDOM_SEED
+from legal_ita.schemas import Provvedimento
+from legal_ita.taxonomy import normalize_macro_area
 
 log = logging.getLogger(__name__)
 

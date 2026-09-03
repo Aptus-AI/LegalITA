@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "legal-ITA-benchmark"
-version = "0.1.0"
+version = "0.2.0"
 description = "Benchmark open source per la valutazione di LLM su task di ragionamento giurisprudenziale italiano"
 readme = "README.md"
 requires-python = ">=3.10"
@@ -21,12 +21,34 @@ dependencies = [
 ]
 
 [project.scripts]
-legalita-grounding = "evaluation.citation_grounding:main"
+legalita-audit-macro-aree = "legal_ita.cli.audit_macro_aree:main"
+legalita-benchmark = "legal_ita.cli.benchmark:main"
+legalita-build-corpus = "legal_ita.cli.build_corpus:main"
+legalita-bullshit = "legal_ita.cli.bullshit:main"
+legalita-charts = "legal_ita.cli.charts:main"
+legalita-grounding = "legal_ita.cli.grounding:main"
+legalita-score-bullshit-csv = "legal_ita.cli.score_external_bullshit:main"
+legalita-score-csv = "legal_ita.cli.score_external_csv:main"
 
 [tool.setuptools]
-# Moduli flat nella root del progetto
-py-modules = ["config", "schemas", "taxonomy", "build_corpus", "run_benchmark", "charts", "usage_tracking", "model_query", "model_request_config", "model_runtime"]
+# Shim di compatibilita per i vecchi import e comandi dalla root.
+py-modules = [
+    "audit_macro_aree",
+    "build_corpus",
+    "charts",
+    "config",
+    "model_query",
+    "model_request_config",
+    "model_runtime",
+    "run_benchmark",
+    "run_bullshit_v2",
+    "schemas",
+    "score_external_bullshit_v2",
+    "score_external_csv_v2",
+    "taxonomy",
+    "usage_tracking",
+]
 
 [tool.setuptools.packages.find]
 # Package veri e propri
-include = ["benchmark*", "evaluation*"]
+include = ["benchmark*", "evaluation*", "legal_ita*"]

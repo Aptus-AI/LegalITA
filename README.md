@@ -170,6 +170,12 @@ il bundle locale pubblico; vedere
 pip install -e .
 ```
 
+The editable install exposes stable command-line entry points. The historical
+root scripts remain as compatibility shims, so existing commands continue to
+work while new integrations can use `legalita-benchmark`,
+`legalita-grounding`, `legalita-score-csv`, and the other `legalita-*`
+commands.
+
 Pipelines that call external providers need a local `.env` file in the project
 root:
 
@@ -309,7 +315,7 @@ unknown combinations             -> excluded with warning
 
 ```bash
 # Preprocess the Cassation corpus
-python build_corpus.py
+legalita-build-corpus
 
 # Build future tasks with canonical slugs
 python -m benchmark.task_builder --n-per-area 50
@@ -319,29 +325,32 @@ python -m benchmark.task_builder --area diritto_penale --n-per-area 20
 python -m benchmark.task_builder --area civile_generale --n-per-area 20
 
 # Run benchmark evaluation
-python run_benchmark.py --models gpt-4o claude-sonnet-4-6 gemini-2.5-pro
+legalita-benchmark --models gpt-4o claude-sonnet-4-6 gemini-2.5-pro
 
 # Run a single macro-area, filtered in memory
-python run_benchmark.py --models gemini-2.5-pro --area diritto_civile
+legalita-benchmark --models gemini-2.5-pro --area diritto_civile
 
 # Generate reports
-python charts.py --latest
+legalita-charts --latest
 ```
 
 ## Repository Layout
 
 ```text
-taxonomy.py          canonical taxonomy, aliases, Cassation classifier
-config.py            shared runtime constants
-schemas.py           Pydantic data models with macro-area normalization
-build_corpus.py      source archive -> canonical corpus.jsonl
-benchmark/           corpus loading, query generation, task building
-evaluation/          judges and scoring
-run_benchmark.py     model execution and evaluation
-score_external_csv_v2.py
-score_external_bullshit_v2.py
-charts.py            leaderboard and plots
-audit_macro_aree.py  local macro-area classification audit
+legal_ita/
+├── cli/             command-line entry points and orchestration
+├── grounding/       local citation-grounding service
+├── modeling/        provider adapters, request config, runtime and usage
+├── config.py        shared runtime constants
+├── schemas.py       Pydantic data models
+└── taxonomy.py      canonical taxonomy and aliases
+benchmark/           corpus loading, preprocessing and task generation
+evaluation/
+├── citations/       citation extraction and local registry/profile access
+├── scoring/         task, citation and summary scoring APIs
+└── reporting/       reports, leaderboard and charts
+scripts/             release and data-bundle utilities
+*.py (root)          deprecated compatibility shims for historical commands
 ```
 
 ## Repository and separately distributed data
@@ -412,9 +421,10 @@ For a lightweight syntax check:
 
 ```bash
 python -m compileall .
-python -c "from run_benchmark import load_tasks; print('ok')"
+python -c "from legal_ita.cli.benchmark import load_tasks; print('ok')"
 ```
 
 Live benchmark runs require the model and judge API keys described above.
-Citation grounding and Structural Gold v3 cannot be run from this repository:
-see [docs/CITATION_GROUNDING.md](docs/CITATION_GROUNDING.md).
+Citation grounding additionally requires the separately distributed local
+registry and question-profile bundle; see
+[docs/CITATION_GROUNDING.md](docs/CITATION_GROUNDING.md).
