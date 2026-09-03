@@ -56,6 +56,12 @@ from legal_ita.modeling.runtime import (
     ANTHROPIC_STREAMING_REQUIRED_ERROR,
     anthropic_response_text as _anthropic_response_text,
 )
+from legal_ita.grounding.service import (
+    records_from_results,
+    require_bundle,
+    resolve_bundle_paths,
+    run_grounding,
+)
 from legal_ita.schemas import BenchmarkTask, TaskScore
 from legal_ita.taxonomy import normalize_macro_area
 from legal_ita.modeling.usage import (
@@ -226,8 +232,22 @@ def run(
     judge_c_provider: str | None = None,
     judge_c_model: str | None = None,
     delay_between: float = 0.3,
-    skip_citation_grounding: bool = True,
+    skip_citation_grounding: bool = False,
 ) -> None:
+    """
+    Esegue modello + judge e, salvo ``skip_citation_grounding``, il citation
+    grounding offline sulla run appena scritta (stesso backend locale di
+    ``legalita-grounding``). Il bundle registry + profili viene verificato
+    prima di qualsiasi chiamata API.
+    """
+    grounding_paths: tuple[Path, Path] | None = None
+    if not skip_citation_grounding:
+        grounding_paths = resolve_bundle_paths()
+        require_bundle(
+            *grounding_paths,
+            hint="Oppure esegui con --skip-citation-grounding per il solo scoring giuridico.",
+        )
+
     judge_config = build_judge_runtime_config(
         judge_strategy=judge_strategy,
         judge_a_provider=judge_a_provider,
@@ -256,7 +276,10 @@ def run(
         judge_config.judge_c.model or "-",
     )
 
-    log.info("Il citation grounding viene eseguito separatamente con legalita-grounding.")
+    if skip_citation_grounding:
+        log.info("Citation grounding disattivato: eseguibile a parte con legalita-grounding.")
+    else:
+        log.info("Citation grounding offline attivo: verra' eseguito al termine dello scoring.")
 
     for model in models:
         log.info("\n%s", "=" * 50)
@@ -303,7 +326,59 @@ def run(
         summary["model_request_config"] = request_config_for_summary(
             _model_request_kwargs_for_summary(model)
         )
+        if grounding_paths is not None:
+            summary.update(
+                ground_run(RESULTS_DIR / run_id, grounding_paths, n_tasks=len(tasks))
+            )
         save_summary(summary, run_id)
+
+
+def ground_run(
+    run_dir: Path,
+    grounding_paths: tuple[Path, Path],
+    *,
+    n_tasks: int,
+) -> dict:
+    """
+    Citation grounding offline della run in ``run_dir``.
+
+    Scrive ``citation_grounding_v3.json`` / ``.md`` nella cartella della run e
+    restituisce i campi da aggiungere a ``summary.json``. Un errore del
+    grounding non invalida lo scoring: viene registrato nel summary.
+    """
+    registry_path, profiles_dir = grounding_paths
+    try:
+        records = records_from_results(run_dir)
+        payload = run_grounding(
+            records,
+            registry_path=registry_path,
+            profiles_dir=profiles_dir,
+            out_dir=run_dir,
+            n_tasks=n_tasks,
+        )
+    except Exception as exc:  # noqa: BLE001 - lo scoring resta valido
+        log.error("Citation grounding non riuscito: %s", exc)
+        return {"citation_grounding_status": "error", "citation_grounding_error": str(exc)}
+
+    grounding = payload.get("summary") or {}
+    log.info(
+        "Citation grounding: GOG=%.1f%%  Coverage=%.1f%%  (%d task, backend=local, registry=%s)",
+        float(grounding.get("gog") or 0) * 100,
+        float(grounding.get("coverage") or 0) * 100,
+        n_tasks,
+        str(grounding.get("registry_built_at") or "unknown")[:10],
+    )
+    log.info("Report grounding: %s", run_dir / "citation_grounding_v3.json")
+    return {
+        "citation_grounding_status": "complete",
+        "citation_grounding_report": str(run_dir / "citation_grounding_v3.json"),
+        "gog": grounding.get("gog"),
+        "coverage": grounding.get("coverage"),
+        "gog_by_task": grounding.get("gog_by_task"),
+        "coverage_by_task": grounding.get("coverage_by_task"),
+        "gog_backend": grounding.get("gog_backend"),
+        "registry_built_at": grounding.get("registry_built_at"),
+    }
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -366,7 +441,11 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--skip-citation-grounding",
         action="store_true",
-        help="Disattiva il citation existence check.",
+        help=(
+            "Esegue solo lo scoring giuridico. Senza questo flag, al termine dello "
+            "scoring viene eseguito il citation grounding offline (richiede il bundle "
+            "registry + question profiles in data/citation_pool/)."
+        ),
     )
     return parser
 

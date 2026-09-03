@@ -69,7 +69,9 @@ With the bundle in place, two parts of LegalITA are reproducible with ordinary
 model and judge API credentials:
 
 ```bash
-# Run the 67-task case-law reasoning benchmark without citation grounding.
+# Run the 67-task case-law reasoning benchmark (legal scoring only).
+# Without --skip-citation-grounding the offline citation grounding also runs
+# at the end and needs the grounding bundle described below.
 python run_benchmark.py --models gpt-4o --skip-citation-grounding
 
 # Run the 40 missing-document detection tasks.
@@ -82,8 +84,10 @@ the model notices that documents invoked by the question were not supplied,
 instead of inventing their contents or giving document-specific advice.
 
 These runs still require API keys for the evaluated model and the configured
-judge or judges. Citation grounding can be run separately with the public
-local bundle; see [docs/CITATION_GROUNDING.md](docs/CITATION_GROUNDING.md).
+judge or judges. With the grounding bundle in place, drop
+`--skip-citation-grounding` and the same command also computes GOG and
+Coverage at the end of the run; see the Citation Grounding section below and
+[docs/CITATION_GROUNDING.md](docs/CITATION_GROUNDING.md).
 
 ## Guida introduttiva: cosa puoi riprodurre oggi
 
@@ -145,7 +149,9 @@ Una volta collocati i file, due componenti di LegalITA sono riproducibili con le
 normali credenziali API del modello e dei judge:
 
 ```bash
-# Esegue i 67 task di ragionamento senza citation grounding.
+# Esegue i 67 task di ragionamento (solo scoring giuridico).
+# Senza --skip-citation-grounding, al termine parte anche il citation grounding
+# offline, che richiede il bundle descritto più avanti.
 python run_benchmark.py --models gpt-4o --skip-citation-grounding
 
 # Esegue i 40 task di rilevazione dei documenti mancanti.
@@ -159,8 +165,9 @@ inventarne il contenuto o proporre una strategia fondata su atti che non ha
 potuto leggere.
 
 Le due esecuzioni richiedono comunque le chiavi API del modello valutato e dei
-judge configurati. Il citation grounding può essere eseguito separatamente con
-il bundle locale pubblico; vedere
+judge configurati. Con il bundle di grounding installato, togliendo
+`--skip-citation-grounding` lo stesso comando calcola anche GOG e Coverage al
+termine della run; vedere la sezione Citation Grounding più avanti e
 [docs/CITATION_GROUNDING.md](docs/CITATION_GROUNDING.md).
 
 ## Setup
@@ -335,16 +342,28 @@ registry=<snapshot date>` line. If it prints `Registry locale non trovato` or
 
 ### Run it
 
-Ground a completed run (a directory containing `scores.json` or
-`outputs.json`), or a CSV of answers from an external system (matched by
-`task_id`, or by question text when the column is missing):
+With the bundle in place, `legalita-benchmark` runs the offline grounding by
+default at the end of the scoring and adds `gog`, `coverage`, `gog_backend`
+and `registry_built_at` to the run's `summary.json`; the detailed report is
+written next to it as `citation_grounding_v3.{json,md}`. The bundle is checked
+before any API call. Pass `--skip-citation-grounding` for legal scoring only:
+
+```bash
+legalita-benchmark --models gpt-4o                             # scoring + grounding
+legalita-benchmark --models gpt-4o --skip-citation-grounding   # scoring only
+```
+
+Grounding can also be run on its own, on a completed run (a directory
+containing `scores.json` or `outputs.json`) or on a CSV of answers from an
+external system (matched by `task_id`, or by question text when the column is
+missing):
 
 ```bash
 legalita-grounding --results results/<provider>/<run> --backend local
 legalita-grounding --csv answers.csv --model SYSTEM_NAME --backend local
 ```
 
-The report is written to
+The standalone report is written to
 `results/grounding-offline/<run>/citation_grounding_v3.{json,md}`. The only
 network call is the citation extractor (`OPENAI_API_KEY`); `--fast-path` skips
 it and evaluates explicit ECLI identifiers only. Use `--task-ids` for a quick
@@ -423,16 +442,29 @@ registry=<data snapshot>`. Se stampa `Registry locale non trovato` o
 
 ### Esecuzione
 
-Grounding di una run già eseguita (directory con `scores.json` o
-`outputs.json`), oppure di un CSV di risposte di un sistema esterno (associate
-per `task_id`, o per testo della domanda se la colonna manca):
+Con il bundle installato, `legalita-benchmark` esegue il grounding offline di
+default al termine dello scoring e aggiunge `gog`, `coverage`, `gog_backend` e
+`registry_built_at` al `summary.json` della run; il report dettagliato viene
+scritto accanto, come `citation_grounding_v3.{json,md}`. Il bundle viene
+verificato prima di qualsiasi chiamata API. Con `--skip-citation-grounding` si
+esegue il solo scoring giuridico:
+
+```bash
+legalita-benchmark --models gpt-4o                             # scoring + grounding
+legalita-benchmark --models gpt-4o --skip-citation-grounding   # solo scoring
+```
+
+Il grounding si può anche eseguire da solo, su una run già completata
+(directory con `scores.json` o `outputs.json`) oppure su un CSV di risposte di
+un sistema esterno (associate per `task_id`, o per testo della domanda se la
+colonna manca):
 
 ```bash
 legalita-grounding --results results/<provider>/<run> --backend local
 legalita-grounding --csv risposte.csv --model NOME_SISTEMA --backend local
 ```
 
-Il report viene scritto in
+Il report dell'esecuzione autonoma viene scritto in
 `results/grounding-offline/<run>/citation_grounding_v3.{json,md}`. L'unica
 chiamata di rete è l'estrattore di citazioni (`OPENAI_API_KEY`); `--fast-path`
 la evita e valuta solo gli ECLI espliciti. `--task-ids` permette una prova

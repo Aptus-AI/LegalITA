@@ -85,6 +85,23 @@ di output.
 
 ## Comandi
 
+Con il bundle installato, `legalita-benchmark` esegue il grounding offline di
+default al termine dello scoring: verifica la presenza del bundle prima di
+qualsiasi chiamata API, scrive `citation_grounding_v3.{json,md}` nella cartella
+della run e aggiunge `gog`, `coverage`, `gog_backend`, `registry_built_at` e
+`citation_grounding_status` al `summary.json`. Un errore del grounding non
+invalida lo scoring: viene registrato come `citation_grounding_error`. Il
+denominatore delle medie è il numero di task della run (67 per una run
+completa, meno con `--limit` o `--area`). Con `--skip-citation-grounding` si
+esegue il solo scoring giuridico.
+
+```bash
+legalita-benchmark --models gpt-4o                             # scoring + grounding
+legalita-benchmark --models gpt-4o --skip-citation-grounding   # solo scoring
+```
+
+Il comando `legalita-grounding` esegue invece il grounding da solo.
+
 Grounding di una run già eseguita, cioè una directory che contiene
 `scores.json` (prodotto da `legalita-benchmark`) oppure `outputs.json`, una
 lista di oggetti con `task_id` e `model_output` (o `response`):
@@ -188,8 +205,8 @@ se dichiarano lo stesso snapshot del registry e la stessa versione dei profili.
 
 I file `summary.json` prodotti da `legalita-benchmark` contengono anche campi
 come `global_grounding` e `required_citation_coverage_rate`: sono metriche del
-vecchio citation gold interno, non GOG e Coverage. Nel repository pubblico il
-grounding si esegue esclusivamente con `legalita-grounding`.
+vecchio citation gold interno, non GOG e Coverage. GOG e Coverage sono i campi
+`gog` e `coverage`, presenti solo quando il grounding offline è stato eseguito.
 
 ## Limiti dello snapshot
 

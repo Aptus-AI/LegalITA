@@ -2,12 +2,14 @@ from __future__ import annotations
 
 import io
 import json
+import os
 import sqlite3
 import tempfile
 import unittest
 from contextlib import redirect_stdout
 from pathlib import Path
 
+from legal_ita.cli import benchmark
 from legal_ita.grounding.service import QuestionProfile, _ground_citation, main
 from evaluation.citations.local_registry import LocalRegistryIndex
 from evaluation.citations.local_resolver import LocalCitationResolver
@@ -173,6 +175,82 @@ class GroundingCliTest(unittest.TestCase):
         self.assertNotIn("citations_total", printed)
         self.assertEqual(report["summary"]["gog"], 1.0)
         self.assertEqual(report["tasks"][0]["citations"][0]["gold_v3_relation"], "issue_aligned")
+
+
+class BenchmarkGroundingIntegrationTest(unittest.TestCase):
+    """Il grounding offline e' parte di legalita-benchmark, salvo --skip-citation-grounding."""
+
+    def test_missing_bundle_stops_before_any_api_call(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            env = {
+                "LEGALITA_CITATION_REGISTRY_PATH": str(Path(tmp) / "missing.sqlite"),
+                "LEGALITA_QUESTION_PROFILES_DIR": str(Path(tmp) / "missing_profiles"),
+            }
+            previous = {key: os.environ.get(key) for key in env}
+            os.environ.update(env)
+            try:
+                with self.assertRaises(SystemExit) as raised:
+                    benchmark.run(models=["gpt-4o"], limit=1, skip_citation_grounding=False)
+            finally:
+                for key, value in previous.items():
+                    if value is None:
+                        os.environ.pop(key, None)
+                    else:
+                        os.environ[key] = value
+
+        message = str(raised.exception)
+        self.assertIn("Registry locale non trovato", message)
+        self.assertIn("Question profiles non trovati", message)
+        self.assertIn("--skip-citation-grounding", message)
+
+    def test_ground_run_writes_report_inside_run_dir_and_summary_fields(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            registry = root / "registry.sqlite"
+            profiles = root / "profiles"
+            run_dir = root / "results" / "test-model" / "run"
+            run_dir.mkdir(parents=True)
+            build_registry(registry)
+            build_profiles(profiles)
+            (run_dir / "scores.json").write_text(
+                json.dumps(
+                    [
+                        {
+                            "task_id": "diritto_civile/0001",
+                            "model": "test-model",
+                            "model_output": f"Si veda {ECLI}.",
+                        }
+                    ]
+                ),
+                encoding="utf-8",
+            )
+            previous = os.environ.get("CITATION_EXTRACTOR_FAST_PATH")
+            os.environ["CITATION_EXTRACTOR_FAST_PATH"] = "1"
+            try:
+                fields = benchmark.ground_run(run_dir, (registry, profiles), n_tasks=1)
+            finally:
+                if previous is None:
+                    os.environ.pop("CITATION_EXTRACTOR_FAST_PATH", None)
+                else:
+                    os.environ["CITATION_EXTRACTOR_FAST_PATH"] = previous
+
+            self.assertTrue((run_dir / "citation_grounding_v3.json").exists())
+            self.assertTrue((run_dir / "citation_grounding_v3.md").exists())
+
+        self.assertEqual(fields["citation_grounding_status"], "complete")
+        self.assertEqual(fields["gog"], 1.0)
+        self.assertEqual(fields["coverage"], 1.0)
+        self.assertEqual(fields["gog_backend"], "local")
+        self.assertEqual(fields["registry_built_at"], "2026-09-03T08:11:21+00:00")
+
+    def test_ground_run_failure_does_not_invalidate_scoring(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            run_dir = Path(tmp)
+            fields = benchmark.ground_run(
+                run_dir, (run_dir / "missing.sqlite", run_dir / "missing"), n_tasks=1
+            )
+        self.assertEqual(fields["citation_grounding_status"], "error")
+        self.assertIn("citation_grounding_error", fields)
 
 
 class PublicBundleTest(unittest.TestCase):

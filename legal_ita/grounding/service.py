@@ -417,9 +417,8 @@ def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
     if args.fast_path:
         os.environ["CITATION_EXTRACTOR_FAST_PATH"] = "1"
-    registry = args.citation_registry or Path(os.environ.get("LEGALITA_CITATION_REGISTRY_PATH", DEFAULT_REGISTRY_PATH))
-    profiles_dir = args.question_profiles or Path(os.environ.get("LEGALITA_QUESTION_PROFILES_DIR", DEFAULT_PROFILES_DIR))
-    _require_bundle(registry, profiles_dir)
+    registry, profiles_dir = resolve_bundle_paths(args.citation_registry, args.question_profiles)
+    require_bundle(registry, profiles_dir)
     profiles = QuestionProfiles(profiles_dir)
     records = (
         records_from_csv(
@@ -455,7 +454,17 @@ def main(argv: list[str] | None = None) -> int:
     return 0
 
 
-def _require_bundle(registry: Path, profiles_dir: Path) -> None:
+def resolve_bundle_paths(
+    registry: Path | None = None,
+    profiles_dir: Path | None = None,
+) -> tuple[Path, Path]:
+    """Registry and profiles paths: explicit argument, then environment, then default."""
+    registry = registry or Path(os.environ.get("LEGALITA_CITATION_REGISTRY_PATH", DEFAULT_REGISTRY_PATH))
+    profiles_dir = profiles_dir or Path(os.environ.get("LEGALITA_QUESTION_PROFILES_DIR", DEFAULT_PROFILES_DIR))
+    return Path(registry), Path(profiles_dir)
+
+
+def require_bundle(registry: Path, profiles_dir: Path, *, hint: str | None = None) -> None:
     """Fail early, with guidance, when the separately distributed bundle is missing."""
     missing: list[str] = []
     if not registry.is_file():
@@ -473,6 +482,7 @@ def _require_bundle(registry: Path, profiles_dir: Path) -> None:
             "\n".join(missing)
             + "\n\nIl bundle registry + question profiles e' distribuito separatamente dal codice:"
             "\nestrarlo in data/citation_pool/ come descritto in docs/CITATION_GROUNDING.md."
+            + (f"\n{hint}" if hint else "")
         )
 
 
