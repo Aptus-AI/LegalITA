@@ -13,6 +13,7 @@ from evaluation.citations.local_registry import LocalRegistryIndex
 from evaluation.citations.local_resolver import LocalCitationResolver
 from evaluation.citations.models import Citation
 from evaluation.citations.structured_urls import extract_structured_url_citations
+from scripts.build_public_grounding_bundle import build_bundle
 
 
 ECLI = "ECLI:IT:CASS:2024:1234CIV"
@@ -172,6 +173,32 @@ class GroundingCliTest(unittest.TestCase):
         self.assertNotIn("citations_total", printed)
         self.assertEqual(report["summary"]["gog"], 1.0)
         self.assertEqual(report["tasks"][0]["citations"][0]["gold_v3_relation"], "issue_aligned")
+
+
+class PublicBundleTest(unittest.TestCase):
+    def test_builder_keeps_only_runtime_profile_fields(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            registry = root / "registry.sqlite"
+            profiles = root / "profiles"
+            bundle = root / "bundle"
+            build_registry(registry)
+            build_profiles(profiles)
+            source_profile = profiles / "diritto_civile_0001.json"
+            payload = json.loads(source_profile.read_text(encoding="utf-8"))
+            payload["internal_notes"] = {"run": "company-only"}
+            source_profile.write_text(json.dumps(payload), encoding="utf-8")
+
+            build_bundle(registry=registry, profiles=profiles, out_dir=bundle)
+            public_profile = json.loads(
+                (bundle / "question_profiles/diritto_civile_0001.json").read_text(encoding="utf-8")
+            )
+            connection = sqlite3.connect(bundle / "registry/ecli_registry_v1.sqlite")
+            source = connection.execute("SELECT value FROM meta WHERE key='source'").fetchone()[0]
+            connection.close()
+
+        self.assertNotIn("internal_notes", public_profile)
+        self.assertEqual(source, "LegalITA public ECLI registry snapshot")
 
 
 if __name__ == "__main__":

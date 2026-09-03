@@ -39,6 +39,20 @@ Questi file sono ignorati da Git. Il report registra sempre la data dello
 snapshot e la versione dei profili, così due risultati possono essere
 confrontati soltanto quando usano lo stesso bundle.
 
+Chi mantiene un registry compatibile può produrre un archivio con il formato
+pubblico minimo usando:
+
+```bash
+python scripts/build_public_grounding_bundle.py \
+  --registry /percorso/ecli_registry_v1.sqlite \
+  --profiles /percorso/question_profiles \
+  --out-dir legalita-grounding-bundle \
+  --zip
+```
+
+Il builder conserva soltanto i campi necessari al runtime, genera un manifest
+con conteggi e checksum e rifiuta di sovrascrivere una destinazione esistente.
+
 ## Utilizzo
 
 Per una directory contenente `scores.json` o `outputs.json`:
