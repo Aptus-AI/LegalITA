@@ -419,6 +419,7 @@ def main(argv: list[str] | None = None) -> int:
         os.environ["CITATION_EXTRACTOR_FAST_PATH"] = "1"
     registry = args.citation_registry or Path(os.environ.get("LEGALITA_CITATION_REGISTRY_PATH", DEFAULT_REGISTRY_PATH))
     profiles_dir = args.question_profiles or Path(os.environ.get("LEGALITA_QUESTION_PROFILES_DIR", DEFAULT_PROFILES_DIR))
+    _require_bundle(registry, profiles_dir)
     profiles = QuestionProfiles(profiles_dir)
     records = (
         records_from_csv(
@@ -452,6 +453,27 @@ def main(argv: list[str] | None = None) -> int:
     )
     _print_report(payload, out_dir)
     return 0
+
+
+def _require_bundle(registry: Path, profiles_dir: Path) -> None:
+    """Fail early, with guidance, when the separately distributed bundle is missing."""
+    missing: list[str] = []
+    if not registry.is_file():
+        missing.append(
+            f"Registry locale non trovato: {registry}\n"
+            "  (opzione --citation-registry o variabile LEGALITA_CITATION_REGISTRY_PATH)"
+        )
+    if not profiles_dir.is_dir():
+        missing.append(
+            f"Question profiles non trovati: {profiles_dir}\n"
+            "  (opzione --question-profiles o variabile LEGALITA_QUESTION_PROFILES_DIR)"
+        )
+    if missing:
+        raise SystemExit(
+            "\n".join(missing)
+            + "\n\nIl bundle registry + question profiles e' distribuito separatamente dal codice:"
+            "\nestrarlo in data/citation_pool/ come descritto in docs/CITATION_GROUNDING.md."
+        )
 
 
 def _available_out_dir(preferred: Path) -> Path:

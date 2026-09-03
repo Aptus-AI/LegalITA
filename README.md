@@ -4,10 +4,9 @@ LegalITA is a benchmark for evaluating language models on Italian case-law
 reasoning tasks. It includes criterion-based legal evaluation, adversarial
 false-premise evaluation and a reproducible local citation-grounding pipeline.
 
-The official internal grounding pipeline runs on private AWS infrastructure
-and is not distributed. The public implementation instead uses a versioned
-SQLite registry and per-question profiles supplied as a separate data bundle;
-it requires no access to Aptus systems.
+Citation grounding runs entirely on local files: a versioned SQLite registry
+of ECLI identifiers and one question profile per task, supplied as a separate
+data bundle. It requires no access to Aptus systems.
 
 ## Getting oriented: what you can reproduce today
 
@@ -184,8 +183,8 @@ ANTHROPIC_API_KEY=...
 OPENAI_API_KEY=...
 ```
 
-Il grounding pubblico usa soltanto `OPENAI_API_KEY` per l'estrazione delle
-citazioni; registry e profili sono file locali.
+Il grounding usa soltanto `OPENAI_API_KEY`, per l'estrazione delle citazioni
+(evitabile con `--fast-path`); registry e profili sono file locali.
 
 ## Adaptive 2-of-3 Judge
 
@@ -276,8 +275,10 @@ reports the GOG and Coverage metrics without contacting an Aptus service:
 legalita-grounding --results results/<provider>/<run> --backend local
 ```
 
-The registry and question profiles are distributed separately because the
-registry is too large for the source repository. Setup, bundle layout and
+The registry and question profiles (about 190 MB) are distributed separately
+because the registry is too large for the source repository. Like the task
+bundle, they are available on request at the e-mail addresses above, with
+subject "grounding bundle legalITA". Setup, bundle layout, snapshot limits and
 report semantics are documented in
 [docs/CITATION_GROUNDING.md](docs/CITATION_GROUNDING.md).
 
@@ -369,8 +370,15 @@ data/raw/sentenze.zip
 artifacts/
 results/
 .env
-local registry and question-profile data bundle
 internal workflow, application backend, and gold-building components
+```
+
+Distributed separately, on request, as a grounding bundle:
+
+```text
+data/citation_pool/registry/ecli_registry_v1.sqlite     ECLI registry snapshot
+data/citation_pool/question_profiles/                   67 question profiles
+data/citation_pool/manifest.json                        counts and checksums
 ```
 
 Included in the repository:
