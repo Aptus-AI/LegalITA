@@ -30,7 +30,19 @@ RESULTS_DIR = ROOT_DIR / "results"
 ARTIFACTS_DIR = ROOT_DIR / "artifacts"
 
 # Current benchmark/gold defaults.
-BULLSHIT_GOLD_PATH = PRIVATE_DIR / "bullshit_tasks_v3_missing_documents_40.json"
+# Gold MDD (Missing Document Detection): il file distribuito si chiama ancora
+# bullshit_tasks_...; se presente, il nome nuovo mdd_tasks_... ha la precedenza.
+MDD_GOLD_PATH = next(
+    (
+        path
+        for path in (
+            PRIVATE_DIR / "mdd_tasks_v3_missing_documents_40.json",
+            PRIVATE_DIR / "bullshit_tasks_v3_missing_documents_40.json",
+        )
+        if path.exists()
+    ),
+    PRIVATE_DIR / "bullshit_tasks_v3_missing_documents_40.json",
+)
 
 CORPUS_ZIP = RAW_DIR / "sentenze.zip"
 CORPUS_JSONL = PROCESSED_DIR / "corpus.jsonl"
@@ -240,6 +252,17 @@ BUILDER_TEMPERATURE: float = 0.0
 # Budget di output identico per tutti i modelli valutati.
 # Include eventuali thinking/reasoning tokens per i modelli che li espongono.
 MODEL_MAX_TOKENS: int = int(os.environ.get("MODEL_MAX_TOKENS", "16000"))
+
+# GPT-6 puo' consumare una quota significativa del budget in reasoning tokens
+# non visibili. Manteniamo un override dedicato per non cambiare il budget dei
+# modelli legacy; 32K lascia piu' del margine iniziale di 25K raccomandato da
+# OpenAI per reasoning + output.
+OPENAI_GPT6_MAX_OUTPUT_TOKENS: int = int(
+    os.environ.get(
+        "OPENAI_GPT6_MAX_OUTPUT_TOKENS",
+        os.environ.get("OPENAI_GPT6_MAX_COMPLETION_TOKENS", "32000"),
+    )
+)
 
 # Numero massimo di tentativi per query a un modello sotto esame.
 MODEL_RETRIES: int = 3

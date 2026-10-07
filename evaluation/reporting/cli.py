@@ -5,12 +5,12 @@ Reportistica e visualizzazioni del benchmark legale italiano.
 La reportistica separa tre dimensioni:
 - legal reasoning sui task standard;
 - citation grounding sui task standard citation-applicable;
-- false-premise detection sui task Bullshit.
+- false-premise detection sui task MDD.
 
 Uso tipico:
-    python charts.py --results results/
-    python charts.py --results results/ --latest
-    python charts.py --results results/ --models claude-sonnet-4-6
+    legalita-charts --results results/
+    legalita-charts --results results/ --latest
+    legalita-charts --results results/ --models claude-sonnet-4-6
 """
 
 from __future__ import annotations
@@ -38,6 +38,7 @@ import matplotlib.ticker as mtick
 import seaborn as sns
 
 from legal_ita.config import RESULTS_DIR
+from legal_ita.schemas import MDD_RESULTS_SUBDIRS, MDD_TASK_TYPE, is_mdd_task
 from legal_ita.taxonomy import normalize_macro_area
 
 log = logging.getLogger(__name__)
@@ -82,7 +83,7 @@ PERCENT_COLUMNS = {
     "mean_task_fabrication_rate",
     "global_fabrication_rate",
     "false_premise_detection_rate",
-    "bullshit_unresolved_rate",
+    "mdd_unresolved_rate",
 }
 
 TASK_NUMERIC_COLUMNS = [
@@ -116,7 +117,7 @@ CRITERIA_COLUMNS = [
     "task_type",
     "macro_area",
     "is_standard_task",
-    "is_bullshit_task",
+    "is_mdd_task",
     "reasoning_scoring_status",
     "criterion_id",
     "criterion_title",
@@ -157,10 +158,10 @@ def _path_model(path: Path, results_dir: Path) -> str:
     """
     Estrae il nome modello da:
     - results/<model>/<timestamp>/scores.json
-    - results/bullshit/<model>/<timestamp>/scores.json
+    - results/mdd/<model>/<timestamp>/scores.json (o results/bullshit/... storico)
     """
     parts = _relative_parts(path, results_dir)
-    if len(parts) >= 4 and parts[0] == "bullshit":
+    if len(parts) >= 4 and parts[0] in MDD_RESULTS_SUBDIRS:
         return parts[1]
     if len(parts) >= 3:
         return parts[0]
@@ -169,8 +170,8 @@ def _path_model(path: Path, results_dir: Path) -> str:
 
 def _path_family(path: Path, results_dir: Path) -> str:
     parts = _relative_parts(path, results_dir)
-    if len(parts) >= 4 and parts[0] == "bullshit":
-        return "bullshit"
+    if len(parts) >= 4 and parts[0] in MDD_RESULTS_SUBDIRS:
+        return MDD_TASK_TYPE
     return "standard"
 
 
@@ -231,14 +232,9 @@ def _macro_area(task_score: dict[str, Any]) -> str:
 
 def _task_type(task_score: dict[str, Any]) -> str:
     task_type = task_score.get("task_type")
-    task_id = str(task_score.get("task_id", "")).replace("\\", "/")
-    if task_type == "bullshit" or task_id.startswith("bullshit/"):
-        return "bullshit"
+    if is_mdd_task(task_type, task_score.get("task_id")):
+        return MDD_TASK_TYPE
     return str(task_type or "standard")
-
-
-def _is_bullshit(task_score: dict[str, Any]) -> bool:
-    return _task_type(task_score) == "bullshit"
 
 
 def _to_bool(value: Any) -> bool | None:
@@ -274,11 +270,11 @@ def _task_row(
     run_id = _run_id(model, timestamp)
     task_id = str(task_score.get("task_id", ""))
     task_type = _task_type(task_score)
-    is_bullshit_task = task_type == "bullshit"
+    is_mdd_row = task_type == MDD_TASK_TYPE
     citation_verdict = task_score.get("citation_verdict")
     citation_status = task_score.get("citation_scoring_status")
     citation_applicable = (
-        not is_bullshit_task
+        not is_mdd_row
         and citation_verdict != "not_applicable"
         and citation_status != "not_applicable"
     )
@@ -292,8 +288,8 @@ def _task_row(
         "task_id": task_id,
         "task_type": task_type,
         "macro_area": _macro_area(task_score),
-        "is_standard_task": not is_bullshit_task,
-        "is_bullshit_task": is_bullshit_task,
+        "is_standard_task": not is_mdd_row,
+        "is_mdd_task": is_mdd_row,
         "citation_applicable": citation_applicable,
         "reasoning_score": task_score.get("reasoning_score", task_score.get("score")),
         "reasoning_all_pass": _to_bool(
@@ -360,7 +356,7 @@ def _criterion_rows(
             "task_type": task_row["task_type"],
             "macro_area": task_row["macro_area"],
             "is_standard_task": task_row["is_standard_task"],
-            "is_bullshit_task": task_row["is_bullshit_task"],
+            "is_mdd_task": task_row["is_mdd_task"],
             "reasoning_scoring_status": task_row["reasoning_scoring_status"],
             "criterion_id": cr.get("id"),
             "criterion_title": cr.get("title"),
@@ -710,13 +706,13 @@ def false_premise_leaderboard(
         out_path: Path | None = None,
 ) -> pd.DataFrame:
     tasks = _dedup_tasks(frames.tasks)
-    bullshit = tasks[tasks["is_bullshit_task"]].copy()
-    if bullshit.empty:
-        log.info("Nessun task Bullshit presente: output false-premise saltati.")
+    mdd = tasks[tasks["is_mdd_task"]].copy()
+    if mdd.empty:
+        log.info("Nessun task MDD presente: output false-premise saltati.")
         return pd.DataFrame()
 
     rows = []
-    for _, group in bullshit.groupby(["run_id", "model", "series_label"], sort=False):
+    for _, group in mdd.groupby(["run_id", "model", "series_label"], sort=False):
         complete = group[group["scoring_status"].fillna("complete") == "complete"]
         pass_mask = (complete["verdict"] == "pass") | (complete["score"] == 1.0)
         unresolved_mask = (group["verdict"] == "unresolved") | (
@@ -726,10 +722,10 @@ def false_premise_leaderboard(
             "model": group["model"].iloc[0],
             "run_id": group["run_id"].iloc[0],
             "series_label": group["series_label"].iloc[0],
-            "n_bullshit_tasks": len(group),
-            "n_bullshit_complete": len(complete),
+            "n_mdd_tasks": len(group),
+            "n_mdd_complete": len(complete),
             "false_premise_detection_rate": _safe_rate(int(pass_mask.sum()), len(complete)),
-            "bullshit_unresolved_rate": _safe_rate(int(unresolved_mask.sum()), len(group)),
+            "mdd_unresolved_rate": _safe_rate(int(unresolved_mask.sum()), len(group)),
         })
 
     leaderboard = pd.DataFrame(rows).sort_values(
@@ -1067,14 +1063,14 @@ def criterion_heatmap(frames: ScoreFrames, out_path: Path | None = None) -> None
 
 def false_premise_detection_chart(leaderboard: pd.DataFrame, out_path: Path) -> None:
     if leaderboard.empty:
-        _save_no_data_figure(out_path, "False-premise detection", "Nessun task Bullshit.")
+        _save_no_data_figure(out_path, "False-premise detection", "Nessun task MDD.")
         return
     _plot_grouped_metric_bars(
         leaderboard,
         index_col="series_label",
         metric_labels={
             "false_premise_detection_rate": "False-premise detection rate",
-            "bullshit_unresolved_rate": "Bullshit unresolved rate",
+            "mdd_unresolved_rate": "MDD unresolved rate",
         },
         title="False-premise detection",
         out_path=out_path,
@@ -1090,17 +1086,17 @@ def log_run_summary(frames: ScoreFrames) -> None:
     log.info("Run incluse: %s", sorted(tasks["series_label"].unique()))
     for label, group in tasks.groupby("series_label", sort=True):
         standard = group[group["is_standard_task"]]
-        bullshit = group[group["is_bullshit_task"]]
+        mdd = group[group["is_mdd_task"]]
         citation_applicable = standard[standard["citation_applicable"]]
         citation_complete = int((citation_applicable["citation_scoring_status"] == "complete").sum())
         citation_nc = int((citation_applicable["citation_verdict"] == "nc").sum())
         citation_unresolved = int((citation_applicable["citation_verdict"] == "unresolved").sum())
         log.info(
-            "%s: task=%d, standard=%d, bullshit=%d, citation complete/NC/unresolved=%d/%d/%d",
+            "%s: task=%d, standard=%d, mdd=%d, citation complete/NC/unresolved=%d/%d/%d",
             label,
             len(group),
             len(standard),
-            len(bullshit),
+            len(mdd),
             citation_complete,
             citation_nc,
             citation_unresolved,
@@ -1153,13 +1149,13 @@ def run_all(
     reasoning_allpass_by_area(area_metrics, out_dir / "allpass_by_area.png")
     criterion_passrate_by_area(area_metrics, out_dir / "criterion_passrate.png")
 
-    bullshit_leaderboard = false_premise_leaderboard(
+    mdd_leaderboard = false_premise_leaderboard(
         frames,
         out_dir / "false_premise_leaderboard.csv",
     )
-    if not bullshit_leaderboard.empty:
+    if not mdd_leaderboard.empty:
         false_premise_detection_chart(
-            bullshit_leaderboard,
+            mdd_leaderboard,
             out_dir / "false_premise_detection.png",
         )
 
@@ -1174,12 +1170,12 @@ def build_parser() -> argparse.ArgumentParser:
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog=(
             "Esempi:\n"
-            "  python charts.py                          # tutti i risultati storici\n"
-            "  python charts.py --latest                 # ultima run per modello/famiglia\n"
-            "  python charts.py --models gpt-4o claude-sonnet-4-6\n"
-            "  python charts.py --since 20260520         # dal 20 maggio 2026 in poi\n"
-            "  python charts.py --areas diritto_civile diritto_tributario\n"
-            "  python charts.py --out results/charts/mio-confronto\n"
+            "  legalita-charts                           # tutti i risultati storici\n"
+            "  legalita-charts --latest                  # ultima run per modello/famiglia\n"
+            "  legalita-charts --models gpt-4o claude-sonnet-4-6\n"
+            "  legalita-charts --since 20260520          # dal 20 maggio 2026 in poi\n"
+            "  legalita-charts --areas diritto_civile diritto_tributario\n"
+            "  legalita-charts --out results/charts/mio-confronto\n"
         ),
     )
     parser.add_argument("--results", type=Path, default=RESULTS_DIR,

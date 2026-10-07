@@ -1,8 +1,16 @@
-# LegalITA
+```text
+█     █████  ███   ███  █     ███ █████  ███
+█░    █░░░░░█ ░░░ █ ░░█ █░     █░░ ░█░░░█ ░░█
+█░░   ████░░█░ ██░█████░█░░    █░░░ █░░░█████░
+█░░   █░░░░ █░░ █░█░░░█░█░░    █░░  █░░ █░░░█░░
+█████ █████░ ███ ░█░░░█░█████ ███░  █░░ █░░░█░░
+ ░░░░░ ░░░░░  ░░░ ░░░  ░░░░░░░ ░░░   ░░  ░░  ░░
+  ░░░░░ ░░░░░  ░░░  ░   ░ ░░░░░ ░░░   ░   ░   ░
+```
 
 LegalITA is a benchmark for evaluating language models on Italian case-law
-reasoning tasks. It includes criterion-based legal evaluation, adversarial
-false-premise evaluation and a reproducible local citation-grounding pipeline.
+reasoning tasks. It includes criterion-based legal evaluation, adversarial Missing
+Document Detection (MDD) and a reproducible local citation-grounding pipeline.
 
 Citation grounding runs entirely on local files: a versioned SQLite registry
 of ECLI identifiers and one question profile per task, supplied as a separate
@@ -65,17 +73,18 @@ layout. It means that the file is kept outside the Git repository; it does not
 mean that the separately distributed 40-task JSON is secret or unavailable for
 benchmark use.
 
-With the bundle in place, two parts of LegalITA are reproducible with ordinary
-model and judge API credentials:
+With the bundle in place and the package installed (`pip install -e .`, see
+Setup), two parts of LegalITA are reproducible with ordinary model and judge
+API credentials:
 
 ```bash
 # Run the 67-task case-law reasoning benchmark (legal scoring only).
 # Without --skip-citation-grounding the offline citation grounding also runs
 # at the end and needs the grounding bundle described below.
-python run_benchmark.py --models gpt-4o --skip-citation-grounding
+legalita-benchmark --models gpt-4o --skip-citation-grounding
 
-# Run the 40 missing-document detection tasks.
-python run_bullshit_v2.py --models gpt-4o
+# Run the 40 Missing Document Detection (MDD) tasks.
+legalita-mdd --models gpt-4o
 ```
 
 The first command measures whether a model's answer satisfies the legal
@@ -145,17 +154,18 @@ indica che il file resta fuori dal repository Git. Non significa che il JSON dei
 40 task, distribuito separatamente, sia segreto o indisponibile per l'uso nel
 benchmark.
 
-Una volta collocati i file, due componenti di LegalITA sono riproducibili con le
-normali credenziali API del modello e dei judge:
+Una volta collocati i file e installato il pacchetto (`pip install -e .`, vedi
+Setup), due componenti di LegalITA sono riproducibili con le normali credenziali
+API del modello e dei judge:
 
 ```bash
 # Esegue i 67 task di ragionamento (solo scoring giuridico).
 # Senza --skip-citation-grounding, al termine parte anche il citation grounding
 # offline, che richiede il bundle descritto più avanti.
-python run_benchmark.py --models gpt-4o --skip-citation-grounding
+legalita-benchmark --models gpt-4o --skip-citation-grounding
 
-# Esegue i 40 task di rilevazione dei documenti mancanti.
-python run_bullshit_v2.py --models gpt-4o
+# Esegue i 40 task di Missing Document Detection (MDD).
+legalita-mdd --models gpt-4o
 ```
 
 Il primo comando misura se la risposta del modello soddisfa i criteri giuridici
@@ -176,11 +186,24 @@ termine della run; vedere la sezione Citation Grounding più avanti e
 pip install -e .
 ```
 
-The editable install exposes stable command-line entry points. The historical
-root scripts remain as compatibility shims, so existing commands continue to
-work while new integrations can use `legalita-benchmark`,
-`legalita-grounding`, `legalita-score-csv`, and the other `legalita-*`
-commands.
+The editable install exposes the command-line entry points; every pipeline is
+run through one of them (each accepts `--help`):
+
+| Command | What it does |
+| --- | --- |
+| `legalita-benchmark` | Runs the 67 reasoning tasks: legal scoring plus offline citation grounding |
+| `legalita-grounding` | Citation grounding alone, on a completed run or on a CSV of external answers |
+| `legalita-score-csv` | Legal scoring of answers produced by an external system (CSV) |
+| `legalita-mdd` | Runs and scores the 40 Missing Document Detection (MDD) tasks |
+| `legalita-score-mdd-csv` | MDD scoring of answers produced by an external system (CSV) |
+| `legalita-charts` | Reports, leaderboards and charts over `results/` |
+| `legalita-build-corpus` | Corpus preprocessing (maintainers only) |
+| `legalita-build-tasks` | Task generation (maintainers only) |
+| `legalita-audit-macro-aree` | Macro-area audit of the corpus (maintainers only) |
+
+MDD runs are written to `results/mdd/<model>/<timestamp>/`. Runs produced
+before the module was renamed (`results/bullshit/...`, `task_type: "bullshit"`)
+are still read by `legalita-charts` and `legalita-mdd --score-outputs`.
 
 Pipelines that call external providers need a local `.env` file in the project
 root:
@@ -236,7 +259,7 @@ JUDGE_A_MODEL=claude-sonnet-4-6
 Example run:
 
 ```bash
-python run_benchmark.py --models gpt-4o --limit 1 --skip-citation-grounding \
+legalita-benchmark --models gpt-4o --limit 1 --skip-citation-grounding \
   --judge-strategy adaptive_majority \
   --judge-a-provider anthropic --judge-a-model claude-sonnet-4-6 \
   --judge-b-provider openai --judge-b-model gpt-5.5 \
@@ -257,14 +280,14 @@ criterion is unresolved, the task is marked with `scoring_status="incomplete"`,
 `score=null`, and `all_pass=null`. Incomplete tasks are excluded from all-pass
 and criterion pass-rate denominators; `unresolved_rate` is reported separately.
 
-The same A/B/C judge logic is used by the adversarial bullshit v2 module. In
-that module, A and B evaluate the whole task, and C is called once only if at
-least one criterion needs tie-break or recovery.
+The same A/B/C judge logic is used by the adversarial MDD (Missing Document
+Detection) v2 module. In that module, A and B evaluate the whole task, and C is
+called once only if at least one criterion needs tie-break or recovery.
 
-Smoke run for one bullshit task:
+Smoke run for one MDD task:
 
 ```bash
-python run_bullshit_v2.py --models gpt-4o --limit 1 \
+legalita-mdd --models gpt-4o --limit 1 \
   --judge-strategy adaptive_majority \
   --judge-a-provider anthropic --judge-a-model claude-sonnet-4-6 \
   --judge-b-provider openai --judge-b-model gpt-5.5 \
@@ -530,11 +553,11 @@ grounding lavora solo su identificativi ECLI.
 legalita-build-corpus
 
 # Build future tasks with canonical slugs (maintainers only)
-python -m benchmark.task_builder --n-per-area 50
+legalita-build-tasks --n-per-area 50
 
 # Build tasks for one area; historical aliases are accepted
-python -m benchmark.task_builder --area diritto_penale --n-per-area 20
-python -m benchmark.task_builder --area civile_generale --n-per-area 20
+legalita-build-tasks --area diritto_penale --n-per-area 20
+legalita-build-tasks --area civile_generale --n-per-area 20
 
 # Run benchmark evaluation
 legalita-benchmark --models gpt-4o claude-sonnet-4-6 gemini-2.5-pro
@@ -550,7 +573,7 @@ legalita-charts --latest
 
 ```text
 legal_ita/
-├── cli/             command-line entry points and orchestration
+├── cli/             command-line entry points (one module per legalita-* command)
 ├── grounding/       local citation-grounding service
 ├── modeling/        provider adapters, request config, runtime and usage
 ├── config.py        shared runtime constants
@@ -559,10 +582,12 @@ legal_ita/
 benchmark/           corpus loading, preprocessing and task generation
 evaluation/
 ├── citations/       citation extraction and local registry/profile access
-├── scoring/         task, citation and summary scoring APIs
-└── reporting/       reports, leaderboard and charts
+├── scoring/         task, citation and summary scoring
+├── reporting/       reports, leaderboard and charts
+├── judge.py         adaptive 2-of-3 judge for the reasoning tasks
+└── mdd_judge.py     judge for the Missing Document Detection (MDD) tasks
 scripts/             release and data-bundle utilities
-*.py (root)          deprecated compatibility shims for historical commands
+tests/               unit tests (python -m unittest discover -s tests)
 ```
 
 ## Repository and separately distributed data
@@ -639,8 +664,8 @@ effettivamente detenuti dal titolare dei diritti di LegalITA.
 For a lightweight syntax check:
 
 ```bash
-python -m compileall .
-python -c "from legal_ita.cli.benchmark import load_tasks; print('ok')"
+python -m compileall legal_ita benchmark evaluation scripts
+python -m unittest discover -s tests
 ```
 
 Live benchmark runs require the model and judge API keys described above.

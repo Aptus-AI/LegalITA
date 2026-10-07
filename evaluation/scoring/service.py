@@ -35,7 +35,15 @@ try:
 except ImportError:
     enrich_grounding_summary = None
 from evaluation.judge import Judge
-from legal_ita.schemas import BenchmarkTask, ConsensusResult, CriterionResult, JudgeVote, TaskScore
+from legal_ita.schemas import (
+    MDD_TASK_TYPES,
+    BenchmarkTask,
+    ConsensusResult,
+    CriterionResult,
+    JudgeVote,
+    TaskScore,
+    has_mdd_task_id,
+)
 from legal_ita.modeling.usage import aggregate_model_call_metrics
 
 log = logging.getLogger(__name__)
@@ -112,11 +120,11 @@ class CitationExistenceScore:
 def is_citation_scoring_applicable(task: Any) -> bool:
     task_type = task.get("task_type") if isinstance(task, Mapping) else getattr(task, "task_type", None)
     task_id = task.get("task_id") if isinstance(task, Mapping) else getattr(task, "task_id", None)
-    if task_type == "bullshit":
+    if task_type in MDD_TASK_TYPES:
         return False
     if task_type:
         return True
-    return not str(task_id or "").replace("\\", "/").startswith("bullshit/")
+    return not has_mdd_task_id(task_id)
 
 
 def evaluate_citation_existence(

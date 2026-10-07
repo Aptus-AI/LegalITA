@@ -5,9 +5,9 @@ Legge data/raw/sentenze.zip, filtra i provvedimenti supportati, normalizza le
 macro-aree canoniche e produce data/processed/corpus.jsonl.
 
 Uso:
-    python build_corpus.py
-    python build_corpus.py --zip data/raw/sentenze.zip
-    python build_corpus.py --limit 1000
+    legalita-build-corpus
+    legalita-build-corpus --zip data/raw/sentenze.zip
+    legalita-build-corpus --limit 1000
 """
 
 import argparse

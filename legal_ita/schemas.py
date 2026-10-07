@@ -11,6 +11,30 @@ from legal_ita.taxonomy import normalize_macro_area
 
 
 # ---------------------------------------------------------------------------
+# Tipi di task
+# ---------------------------------------------------------------------------
+
+# Task del modulo Missing Document Detection (MDD). "bullshit" e' il nome
+# storico: compare ancora nel gold distribuito (task_type e prefisso dei
+# task_id) e nei risultati gia' prodotti, quindi resta accettato in lettura.
+MDD_TASK_TYPE = "mdd"
+LEGACY_MDD_TASK_TYPE = "bullshit"
+MDD_TASK_TYPES = frozenset({MDD_TASK_TYPE, LEGACY_MDD_TASK_TYPE})
+MDD_RESULTS_SUBDIRS = ("mdd", "bullshit")
+
+
+def has_mdd_task_id(task_id: object) -> bool:
+    """True se il task_id ha il prefisso di un task MDD (``mdd/`` o ``bullshit/``)."""
+    normalized = str(task_id or "").replace("\\", "/")
+    return any(normalized.startswith(f"{task_type}/") for task_type in MDD_TASK_TYPES)
+
+
+def is_mdd_task(task_type: object, task_id: object = None) -> bool:
+    """True per i task MDD, riconosciuti dal task_type o dal prefisso del task_id."""
+    return task_type in MDD_TASK_TYPES or has_mdd_task_id(task_id)
+
+
+# ---------------------------------------------------------------------------
 # Corpus
 # ---------------------------------------------------------------------------
 

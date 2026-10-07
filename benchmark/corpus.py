@@ -1,6 +1,6 @@
 """
 Loader del corpus processato.
-Legge corpus.jsonl prodotto da build_corpus.py e restituisce
+Legge corpus.jsonl prodotto da legalita-build-corpus e restituisce
 liste di Provvedimento, con supporto a filtri per macro_area.
 
 Uso tipico:
@@ -49,7 +49,7 @@ def load_corpus(
     if not path.exists():
         raise FileNotFoundError(
             f"Corpus non trovato: {path}\n"
-            f"Esegui prima: python build_corpus.py"
+            f"Esegui prima: legalita-build-corpus"
         )
 
     requested_area = (

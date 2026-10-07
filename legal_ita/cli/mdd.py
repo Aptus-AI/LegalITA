@@ -1,11 +1,12 @@
 """
-Entrypoint provider-agnostic per il modulo adversarial Bullshit v2.
+Entrypoint provider-agnostic per il modulo adversarial MDD (Missing Document
+Detection) v2.
 
 Esempi:
-    python run_bullshit_v2.py --models claude-sonnet-4-6
-    python run_bullshit_v2.py --models claude-sonnet-4-6 gpt-4o gemini-2.5-pro
-    python run_bullshit_v2.py --models claude-sonnet-4-6 --generate-only
-    python run_bullshit_v2.py --score-outputs results/bullshit/<model>/<run>/outputs.json
+    legalita-mdd --models claude-sonnet-4-6
+    legalita-mdd --models claude-sonnet-4-6 gpt-4o gemini-2.5-pro
+    legalita-mdd --models claude-sonnet-4-6 --generate-only
+    legalita-mdd --score-outputs results/mdd/<model>/<run>/outputs.json
 """
 
 from __future__ import annotations
@@ -25,21 +26,21 @@ import openai
 from dotenv import load_dotenv
 
 from legal_ita.config import (
-    BULLSHIT_GOLD_PATH,
+    MDD_GOLD_PATH,
     JUDGE_MODEL,
     MODEL_MAX_TOKENS,
     MODEL_RETRIES,
     RANDOM_SEED,
     RESULTS_DIR,
 )
-from evaluation.bullshit_judge import (
-    BullshitJudge,
-    BullshitScore,
-    BullshitTask,
-    create_bullshit_judge_from_config,
-    load_bullshit_tasks,
-    score_bullshit_batch,
-    summarize_bullshit_scores,
+from evaluation.mdd_judge import (
+    MDDJudge,
+    MDDScore,
+    MDDTask,
+    create_mdd_judge_from_config,
+    load_mdd_tasks,
+    score_mdd_batch,
+    summarize_mdd_scores,
 )
 from legal_ita.modeling.query import (
     GEMINI_BASE_URL,
@@ -94,11 +95,11 @@ def model_slug(model: str) -> str:
 
 
 def select_tasks(
-    tasks: list[BullshitTask],
+    tasks: list[MDDTask],
     area: str | None = None,
     limit: int | None = None,
     seed: int = RANDOM_SEED,
-) -> list[BullshitTask]:
+) -> list[MDDTask]:
     """Filtra o campiona i task per smoke test e run mirate."""
     selected = tasks
 
@@ -180,13 +181,13 @@ def query_model_with_metrics(
 
 def create_run_dir(model: str, results_dir: Path = RESULTS_DIR) -> Path:
     timestamp = datetime.now(timezone.utc).strftime("%Y%m%d-%H%M%S")
-    out_dir = results_dir / "bullshit" / model_slug(model) / timestamp
+    out_dir = results_dir / "mdd" / model_slug(model) / timestamp
     out_dir.mkdir(parents=True, exist_ok=True)
     return out_dir
 
 
 def generate_outputs(
-    tasks: list[BullshitTask],
+    tasks: list[MDDTask],
     model: str,
     delay_between: float,
     query_fn: QueryFn = query_model_with_metrics,
@@ -197,7 +198,7 @@ def generate_outputs(
 
 
 def generate_outputs_with_metrics(
-    tasks: list[BullshitTask],
+    tasks: list[MDDTask],
     model: str,
     delay_between: float,
     query_fn: QueryFn = query_model_with_metrics,
@@ -227,7 +228,7 @@ def generate_outputs_with_metrics(
 
 
 def output_records(
-    tasks: list[BullshitTask],
+    tasks: list[MDDTask],
     outputs: dict[str, str],
     model: str,
 ) -> list[dict]:
@@ -248,7 +249,7 @@ def output_records(
 
 def save_outputs(
     out_dir: Path,
-    tasks: list[BullshitTask],
+    tasks: list[MDDTask],
     outputs: dict[str, str],
     model: str,
 ) -> Path:
@@ -263,7 +264,7 @@ def save_outputs(
 
 
 def load_outputs_for_scoring(path: Path) -> tuple[str, dict[str, str], list[str]]:
-    """Carica un outputs.json precedentemente prodotto dal modulo bullshit."""
+    """Carica un outputs.json precedentemente prodotto dal modulo MDD."""
     if not path.exists():
         raise FileNotFoundError(f"Outputs non trovati: {path}")
 
@@ -289,7 +290,7 @@ def load_outputs_for_scoring(path: Path) -> tuple[str, dict[str, str], list[str]
 
 def save_scores_and_summary(
     out_dir: Path,
-    scores: list[BullshitScore],
+    scores: list[MDDScore],
     summary: dict,
     *,
     include_model_call_fields: bool = True,
@@ -328,7 +329,7 @@ def print_summary(
     overall = summary["overall"]
     diagnostics = summary["diagnostics"]
     print()
-    print("=== RISULTATI BULLSHIT V2 ===")
+    print("=== RISULTATI MDD V2 ===")
     print(f"Modello valutato:        {evaluated_model}")
     print(f"Judge:                   {judge_model}")
     if summary.get("judge_strategy"):
@@ -358,12 +359,12 @@ def print_summary(
 
 
 def score_and_save(
-    tasks: list[BullshitTask],
+    tasks: list[MDDTask],
     outputs: dict[str, str],
     evaluated_model: str,
     judge_model: str,
     out_dir: Path,
-    judge: BullshitJudge | None = None,
+    judge: MDDJudge | None = None,
     judge_strategy: str | None = None,
     judge_a_provider: str | None = None,
     judge_a_model: str | None = None,
@@ -374,8 +375,8 @@ def score_and_save(
     model_call_metrics: dict[str, dict[str, object]] | None = None,
     summary_extra: dict | None = None,
 ) -> tuple[Path, Path]:
-    """Valuta output gia raccolti con il judge bullshit e salva score/summary."""
-    judge = judge or create_bullshit_judge_from_config(
+    """Valuta output gia raccolti con il judge MDD e salva score/summary."""
+    judge = judge or create_mdd_judge_from_config(
         judge_strategy=judge_strategy,
         judge_a_provider=judge_a_provider,
         judge_a_model=judge_a_model,
@@ -385,7 +386,7 @@ def score_and_save(
         judge_c_model=judge_c_model,
         legacy_judge_model=judge_model,
     )
-    scores = score_bullshit_batch(
+    scores = score_mdd_batch(
         tasks=tasks,
         outputs=outputs,
         model=evaluated_model,
@@ -399,7 +400,7 @@ def score_and_save(
         )
         for score in scores
     ]
-    summary = summarize_bullshit_scores(scores)
+    summary = summarize_mdd_scores(scores)
     summary["evaluated_model"] = evaluated_model
     summary["judge_model"] = judge.model
     summary["judge_strategy"] = getattr(judge, "strategy", "single")
@@ -428,7 +429,7 @@ def score_and_save(
     return scores_path, summary_path
 
 
-def tasks_from_output_ids(all_tasks: list[BullshitTask], task_ids: list[str]) -> list[BullshitTask]:
+def tasks_from_output_ids(all_tasks: list[MDDTask], task_ids: list[str]) -> list[MDDTask]:
     task_id_set = set(task_ids)
     tasks = [task for task in all_tasks if task.task_id in task_id_set]
     missing_gold = sorted(task_id_set - {task.task_id for task in all_tasks})
@@ -441,13 +442,13 @@ def tasks_from_output_ids(all_tasks: list[BullshitTask], task_ids: list[str]) ->
 
 def run_models(
     models: list[str],
-    tasks: list[BullshitTask],
+    tasks: list[MDDTask],
     judge_model: str,
     delay_between: float,
     generate_only: bool,
     query_fn: QueryFn = query_model,
     results_dir: Path = RESULTS_DIR,
-    judge_factory: Callable[[str], BullshitJudge] | None = None,
+    judge_factory: Callable[[str], MDDJudge] | None = None,
     judge_strategy: str | None = None,
     judge_a_provider: str | None = None,
     judge_a_model: str | None = None,
@@ -502,7 +503,7 @@ def run_models(
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
-        description="Esegue modelli API e/o il bullshit judge sui 40 task missing-document v2."
+        description="Esegue modelli API e/o il judge MDD sui 40 task missing-document v2."
     )
     parser.add_argument(
         "--models",
@@ -531,8 +532,8 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--gold",
         type=Path,
-        default=BULLSHIT_GOLD_PATH,
-        help="Percorso del gold privato bullshit corrente.",
+        default=MDD_GOLD_PATH,
+        help="Percorso del gold privato MDD corrente.",
     )
     parser.add_argument(
         "--area",
@@ -571,7 +572,7 @@ def main(argv: list[str] | None = None) -> int:
     parser = build_parser()
     args = parser.parse_args(argv)
 
-    all_tasks = load_bullshit_tasks(args.gold)
+    all_tasks = load_mdd_tasks(args.gold)
 
     if args.score_outputs:
         evaluated_model, outputs, task_ids = load_outputs_for_scoring(args.score_outputs)
@@ -596,7 +597,7 @@ def main(argv: list[str] | None = None) -> int:
         parser.error("--models e richiesto quando non usi --score-outputs.")
 
     tasks = select_tasks(all_tasks, area=args.area, limit=args.limit)
-    log.info("Task bullshit selezionati: %d", len(tasks))
+    log.info("Task MDD selezionati: %d", len(tasks))
 
     run_models(
         models=args.models,

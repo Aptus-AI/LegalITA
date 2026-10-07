@@ -2,9 +2,9 @@
 Audit rapido delle macro-aree del corpus Cassazione.
 
 Uso:
-    python .\audit_macro_aree.py
-    python .\audit_macro_aree.py --area diritto_civile --examples 10
-    python .\audit_macro_aree.py --area civile_generale --examples 10
+    legalita-audit-macro-aree
+    legalita-audit-macro-aree --area diritto_civile --examples 10
+    legalita-audit-macro-aree --area civile_generale --examples 10
 
 Output, solo se eseguito:
     audit_macro_aree_dettaglio.csv
@@ -40,7 +40,7 @@ def load_dataframe(path: Path) -> pd.DataFrame:
     if not path.exists():
         raise FileNotFoundError(
             f"Corpus non trovato: {path}\n"
-            "Esegui prima: python .\\build_corpus.py"
+            "Esegui prima: legalita-build-corpus"
         )
 
     records = []

@@ -24,30 +24,12 @@ dependencies = [
 legalita-audit-macro-aree = "legal_ita.cli.audit_macro_aree:main"
 legalita-benchmark = "legal_ita.cli.benchmark:main"
 legalita-build-corpus = "legal_ita.cli.build_corpus:main"
-legalita-bullshit = "legal_ita.cli.bullshit:main"
+legalita-build-tasks = "legal_ita.cli.build_tasks:main"
 legalita-charts = "legal_ita.cli.charts:main"
 legalita-grounding = "legal_ita.cli.grounding:main"
-legalita-score-bullshit-csv = "legal_ita.cli.score_external_bullshit:main"
+legalita-mdd = "legal_ita.cli.mdd:main"
 legalita-score-csv = "legal_ita.cli.score_external_csv:main"
-
-[tool.setuptools]
-# Shim di compatibilita per i vecchi import e comandi dalla root.
-py-modules = [
-    "audit_macro_aree",
-    "build_corpus",
-    "charts",
-    "config",
-    "model_query",
-    "model_request_config",
-    "model_runtime",
-    "run_benchmark",
-    "run_bullshit_v2",
-    "schemas",
-    "score_external_bullshit_v2",
-    "score_external_csv_v2",
-    "taxonomy",
-    "usage_tracking",
-]
+legalita-score-mdd-csv = "legal_ita.cli.score_external_mdd:main"
 
 [tool.setuptools.packages.find]
 # Package veri e propri

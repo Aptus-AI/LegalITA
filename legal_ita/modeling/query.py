@@ -3,7 +3,7 @@ Layer condiviso di interrogazione dei modelli sotto esame.
 
 Contiene gli adapter provider (Anthropic, OpenAI, Gemini via endpoint
 OpenAI-compatibile, Novita) e il ciclo di retry con backoff esponenziale
-usati da run_benchmark.py e run_bullshit_v2.py. I runner mantengono nel
+usati da legalita-benchmark e legalita-mdd. I runner mantengono nel
 proprio namespace gli alias storici (_query_anthropic, ...) e il routing
 per prefisso, cosi' i test possono sostituire i singoli adapter sul modulo
 runner senza conoscere questo layer.
@@ -18,12 +18,13 @@ import anthropic
 from legal_ita import config as benchmark_config
 import openai
 
-from legal_ita.config import MODEL_MAX_TOKENS
+from legal_ita.config import MODEL_MAX_TOKENS, OPENAI_GPT6_MAX_OUTPUT_TOKENS
 from legal_ita.modeling.request_config import (
     anthropic_message_kwargs,
     gemini_completion_kwargs,
     novita_completion_kwargs,
     openai_completion_kwargs,
+    openai_response_kwargs,
 )
 from legal_ita.modeling.runtime import (
     anthropic_response_text,
@@ -160,10 +161,24 @@ def query_openai(model: str, query: str) -> str:
 def query_openai_with_metrics(model: str, query: str) -> ModelCallResult:
     client = openai.OpenAI()
     started_at = time.perf_counter()
-    response = client.chat.completions.create(
-        **default_openai_completion_kwargs(model, query),
-    )
-    content = response.choices[0].message.content
+    if _is_openai_gpt6(model):
+        response = client.responses.create(**default_openai_response_kwargs(model, query))
+        if getattr(response, "status", None) == "incomplete":
+            details = getattr(response, "incomplete_details", None)
+            log.warning(
+                "Risposta %s incompleta: reason=%s",
+                model,
+                getattr(details, "reason", None),
+            )
+        content = response.output_text
+    else:
+        response = client.chat.completions.create(
+            **default_openai_completion_kwargs(model, query),
+        )
+        choice = response.choices[0]
+        if getattr(choice, "finish_reason", None) == "length":
+            log.warning("Risposta %s troncata dal provider: finish_reason=length", model)
+        content = choice.message.content
     if content is None:
         raise ValueError("Risposta OpenAI priva di contenuto testuale.")
     return ModelCallResult(
@@ -178,7 +193,12 @@ def query_openai_with_metrics(model: str, query: str) -> ModelCallResult:
 
 
 def default_openai_completion_kwargs(model: str, query: str) -> dict[str, object]:
-    return openai_completion_kwargs(model, query, MODEL_MAX_TOKENS)
+    max_tokens = OPENAI_GPT6_MAX_OUTPUT_TOKENS if _is_openai_gpt6(model) else MODEL_MAX_TOKENS
+    return openai_completion_kwargs(model, query, max_tokens)
+
+
+def default_openai_response_kwargs(model: str, query: str) -> dict[str, object]:
+    return openai_response_kwargs(model, query, OPENAI_GPT6_MAX_OUTPUT_TOKENS)
 
 
 def query_gemini(model: str, query: str) -> str:
@@ -259,6 +279,12 @@ def model_request_kwargs_for_summary(model: str) -> dict[str, object]:
         return default_gemini_completion_kwargs(model, "")
     if model.startswith("claude"):
         return default_anthropic_message_kwargs(model, "")
+    if _is_openai_gpt6(model):
+        return default_openai_response_kwargs(model, "")
     if any(model.startswith(prefix) for prefix in ("gpt", "o1", "o3", "o4")):
         return default_openai_completion_kwargs(model, "")
     return {"model": model}
+
+
+def _is_openai_gpt6(model: str) -> bool:
+    return model.strip().lower().startswith("gpt-6")

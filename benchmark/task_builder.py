@@ -12,8 +12,12 @@ Uso tipico:
     builder = TaskBuilder()
     task = builder.build(provvedimento, query)
     builder.save(task)
+
+Da riga di comando:
+    legalita-build-tasks --n-per-area 50
 """
 
+import argparse
 import json
 import logging
 import re
@@ -27,6 +31,7 @@ from legal_ita.config import (
     GENERATOR_MODEL,
     MAX_CRITERIA,
     MAX_SOURCE_PRINCIPLES,
+    RANDOM_SEED,
     TASKS_DIR,
 )
 from legal_ita.schemas import BenchmarkTask, Criterion, Provvedimento
@@ -574,24 +579,7 @@ def build_batch(
 # Entrypoint
 # ---------------------------------------------------------------------------
 
-if __name__ == "__main__":
-    import argparse
-    import sys
-
-    from dotenv import load_dotenv
-
-    from benchmark.corpus import load_corpus_by_area
-    from benchmark.generator import QueryGenerator, generate_batch
-    from legal_ita.config import RANDOM_SEED
-
-    load_dotenv()
-
-    logging.basicConfig(
-        level=logging.INFO,
-        format="%(asctime)s  %(levelname)-8s  %(message)s",
-        datefmt="%H:%M:%S",
-    )
-
+def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Genera i task.json del benchmark.")
     parser.add_argument(
         "--n-per-area",
@@ -616,7 +604,26 @@ if __name__ == "__main__":
         default=0.5,
         help="Pausa in secondi tra chiamate API (default: 0.5)",
     )
-    args = parser.parse_args()
+    return parser
+
+
+def main(argv: list[str] | None = None) -> int:
+    import random
+
+    from dotenv import load_dotenv
+
+    from benchmark.corpus import load_corpus_by_area
+    from benchmark.generator import QueryGenerator, generate_batch
+
+    load_dotenv()
+
+    logging.basicConfig(
+        level=logging.INFO,
+        format="%(asctime)s  %(levelname)-8s  %(message)s",
+        datefmt="%H:%M:%S",
+    )
+
+    args = build_parser().parse_args(argv)
 
     # carica corpus stratificato per macro-area
     corpus_by_area = load_corpus_by_area(seed=args.seed)
@@ -626,12 +633,10 @@ if __name__ == "__main__":
         if requested_area not in corpus_by_area:
             log.error(f"Macro-area non trovata: {args.area} -> {requested_area}")
             log.error(f"Disponibili: {sorted(corpus_by_area.keys())}")
-            sys.exit(1)
+            return 1
         corpus_by_area = {requested_area: corpus_by_area[requested_area]}
 
     # campiona N provvedimenti per area
-    import random
-
     rng = random.Random(args.seed)
     provvedimenti = []
     for area, records in corpus_by_area.items():
@@ -656,3 +661,8 @@ if __name__ == "__main__":
     log.info("=" * 50)
     log.info(f"Task scritti: {len(tasks)}")
     log.info(f"Output: {builder.tasks_dir}")
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

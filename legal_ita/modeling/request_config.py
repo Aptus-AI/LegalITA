@@ -10,8 +10,11 @@ from copy import deepcopy
 from typing import Any
 
 
-OPENAI_REASONING_PREFIXES = ("gpt-5", "o1", "o3", "o4")
-OPENAI_MAX_SUPPORTED_REASONING_EFFORT = "high"
+OPENAI_REASONING_PREFIXES = ("gpt-5", "gpt-6", "o1", "o3", "o4")
+OPENAI_GPT6_PREFIX = "gpt-6"
+OPENAI_DEFAULT_REASONING_EFFORT = "high"
+OPENAI_GPT6_CHAT_REASONING_EFFORT = "xhigh"
+OPENAI_GPT6_RESPONSE_REASONING_EFFORT = "high"
 GEMINI_MAX_SUPPORTED_REASONING_EFFORT = "high"
 PROVIDER_MAX_REASONING_EFFORT = "max"
 ANTHROPIC_REASONING_PREFIXES = ("claude-sonnet-4", "claude-opus-4")
@@ -44,8 +47,25 @@ def openai_completion_kwargs(model: str, query: str, max_tokens: int) -> dict[st
         "messages": [{"role": "user", "content": query}],
     }
     if normalized.startswith(OPENAI_REASONING_PREFIXES):
-        kwargs["reasoning_effort"] = OPENAI_MAX_SUPPORTED_REASONING_EFFORT
+        kwargs["reasoning_effort"] = (
+            OPENAI_GPT6_CHAT_REASONING_EFFORT
+            if normalized.startswith(OPENAI_GPT6_PREFIX)
+            else OPENAI_DEFAULT_REASONING_EFFORT
+        )
     return kwargs
+
+
+def openai_response_kwargs(model: str, query: str, max_tokens: int) -> dict[str, object]:
+    """Build the Responses API request used to evaluate GPT-6 models."""
+    normalized = model.strip().lower()
+    if not normalized.startswith(OPENAI_GPT6_PREFIX):
+        raise ValueError("La Responses API e' configurata qui soltanto per modelli GPT-6.")
+    return {
+        "model": model,
+        "input": [{"role": "user", "content": query}],
+        "max_output_tokens": max_tokens,
+        "reasoning": {"effort": OPENAI_GPT6_RESPONSE_REASONING_EFFORT},
+    }
 
 
 def gemini_completion_kwargs(model: str, query: str, max_tokens: int) -> dict[str, object]:

@@ -1,8 +1,8 @@
 """
-Scoring bullshit v2 per risposte importate da CSV.
+Scoring MDD v2 per risposte importate da CSV.
 
 Esempi:
-    python score_external_bullshit_v2.py --csv risposte.csv --model nextos
+    legalita-score-mdd-csv --csv risposte.csv --model nextos
 """
 
 from __future__ import annotations
@@ -18,9 +18,9 @@ from pathlib import Path
 import pandas as pd
 from dotenv import load_dotenv
 
-from legal_ita.config import BULLSHIT_GOLD_PATH, JUDGE_MODEL, RESULTS_DIR
-from evaluation.bullshit_judge import BullshitJudge, BullshitTask, load_bullshit_tasks
-from legal_ita.cli.bullshit import (
+from legal_ita.config import MDD_GOLD_PATH, JUDGE_MODEL, RESULTS_DIR
+from evaluation.mdd_judge import MDDJudge, MDDTask, load_mdd_tasks
+from legal_ita.cli.mdd import (
     create_run_dir,
     model_slug,
     save_outputs,
@@ -30,6 +30,7 @@ from legal_ita.cli.bullshit import (
 
 
 QUESTION_COLUMNS = (
+    "Domanda MDD",
     "Domanda bullshit",
     "Domanda",
     "Question",
@@ -84,8 +85,8 @@ def detect_column(columns: list[str], explicit: str | None, candidates: tuple[st
     )
 
 
-def build_gold_question_index(tasks: list[BullshitTask]) -> dict[str, BullshitTask]:
-    grouped: dict[str, list[BullshitTask]] = defaultdict(list)
+def build_gold_question_index(tasks: list[MDDTask]) -> dict[str, MDDTask]:
+    grouped: dict[str, list[MDDTask]] = defaultdict(list)
     for task in tasks:
         grouped[normalize_question_for_matching(task.query)].append(task)
 
@@ -102,7 +103,7 @@ def build_gold_question_index(tasks: list[BullshitTask]) -> dict[str, BullshitTa
 
 def load_external_outputs(
     csv_path: Path,
-    tasks: list[BullshitTask],
+    tasks: list[MDDTask],
     question_column: str | None = None,
     answer_column: str | None = None,
 ) -> dict[str, str]:
@@ -164,7 +165,7 @@ def load_external_outputs(
 def run_external_csv(
     csv_path: Path,
     model: str,
-    gold_path: Path = BULLSHIT_GOLD_PATH,
+    gold_path: Path = MDD_GOLD_PATH,
     judge_model: str = JUDGE_MODEL,
     area: str | None = None,
     limit: int | None = None,
@@ -178,9 +179,9 @@ def run_external_csv(
     question_column: str | None = None,
     answer_column: str | None = None,
     results_dir: Path = RESULTS_DIR,
-    judge_factory: Callable[[str], BullshitJudge] | None = None,
+    judge_factory: Callable[[str], MDDJudge] | None = None,
 ) -> tuple[Path, Path, Path]:
-    all_tasks = load_bullshit_tasks(gold_path)
+    all_tasks = load_mdd_tasks(gold_path)
     tasks = select_tasks(all_tasks, area=area, limit=limit)
     outputs = load_external_outputs(
         csv_path=csv_path,
@@ -213,7 +214,7 @@ def run_external_csv(
     )
 
     print()
-    print("=== IMPORT CSV BULLSHIT V2 ===")
+    print("=== IMPORT CSV MDD V2 ===")
     print(f"Modello valutato:        {model}")
     print(f"CSV sorgente:            {csv_path}")
     print(f"Outputs salvati in:      {outputs_path}")
@@ -222,7 +223,7 @@ def run_external_csv(
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
-        description="Valuta risposte bullshit v2 importate da CSV."
+        description="Valuta risposte MDD v2 importate da CSV."
     )
     parser.add_argument("--csv", type=Path, required=True, help="CSV con domande e risposte.")
     parser.add_argument("--model", type=str, required=True, help="Nome modello/sistema valutato.")
@@ -234,7 +235,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--judge-b-model", default=None)
     parser.add_argument("--judge-c-provider", choices=["anthropic", "openai"], default=None)
     parser.add_argument("--judge-c-model", default=None)
-    parser.add_argument("--gold", type=Path, default=BULLSHIT_GOLD_PATH, help="Gold corrente bullshit v3.")
+    parser.add_argument("--gold", type=Path, default=MDD_GOLD_PATH, help="Gold corrente MDD v3.")
     parser.add_argument("--area", type=str, default=None, help="Filtra macro-area.")
     parser.add_argument("--limit", type=int, default=None, help="Campiona N task.")
     parser.add_argument("--question-column", type=str, default=None, help="Colonna domanda.")
